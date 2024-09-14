@@ -1,0 +1,121 @@
+---
+title: "User Guide"
+author: "David Eubanks"
+date: "`r Sys.Date()`"
+output: html_vignette
+vignette: >
+  %\VignetteIndexEntry{User Guide}
+  %\VignetteEngine{quarto::quarto_vignette}
+  %\VignetteEncoding{UTF-8}
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+# Introduction
+
+This is a user guide to the `tapModel` package. It will show you how to format a data set of ratings and fit a t-a-p model to the data. For more about what these models are, see \[link\].
+
+There are data sets included in the package to use as examples. We'll use the `wine` data set. One the `tapModel` library is loaded, you can access the data set with `data(wine)`.
+
+```{r}
+#| message: false
+#| warning: false
+library(tidyverse)
+library(tapModel)
+
+#' Load the included wine data
+data(wine)
+
+head(wine)
+
+#' It has rating in columns, one for each wine judge. Each row is a wine.
+#' We can convert to a standard long format with the `format_data` function.
+ratings <- tapModel::format_data(wine, data_type = "raters")
+
+#' To compute the t-a-p model, we need the counts for each class. This is a 
+#' dataframe with one row per subjec, with two columns:
+#'        N_r, the number of ratings for that subject
+#'        N_c, the number of ratings in class 1 for that subject
+#'        
+#' If we define Class 1 to be "acceptable" wine, with ratings {2,3,4} vs 
+#' Class 0 = rating 1, we can find the counts with
+counts <- tapModel::count_ratings(ratings, c(2,3,4))
+
+#' Compute the solution
+tap <- tapModel::iterative_optim(counts)
+
+#' Show the results
+tap
+
+```
+
+You can also format the data using tidyverse functions without the helpers.
+
+```{r}
+inclass <- 2:4 # set the range of acceptable ratings
+
+# this will work for the data format where each rater has a column
+counts <- wine %>%
+  mutate(N_r = rowSums(across(everything(), ~ !is.na(.))),   
+         N_c = rowSums(across(everything(), ~ . %in% inclass))) |> 
+  select(N_r, N_c)
+          
+counts        
+```
+
+## Ordinal Analysis
+
+In addition to a binary comparison, where we split the range of possible ratings into two sets, we can also use the ordinal analysis. This is where we put the ratings in a sensible order, like "strongly disagree" to "strongly agree" for a common survey response, then consider each cut-point between these values. In the case of the wine ratings, we have:
+
+| Rating Value | Meaning      |
+|--------------|--------------|
+| 1            | No medal     |
+| 2            | Bronze medal |
+| 3            | Silver medal |
+| 4            | Gold medal   |
+
+: Wine rating scale
+
+There are three natural cut-points:
+
+-   1\|2 divides the 1 ratings from higher ones
+
+-   2\|3 divides the {1,2} ratings from the {3,4} ratings
+
+-   3\|4 divides the {1,2,3} ratings from the 4 ratings.
+
+Each cut point defines a binary classification system, which we can estimate the t-a-p parameters for.
+
+To use the built-in function for iterating over the cut-points, we need to prepare the data to be in a long format with only two columns `SubjectID__` and `rating`.
+
+```{r}
+# this will work for the data format where each rater has a column
+ratings <- wine %>%
+  mutate(SubjectID__ = row_number()) |> 
+  gather(judge, rating, -SubjectID__) |> 
+  select(SubjectID__, rating)
+
+ratings
+```
+
+Now we can apply the function to find estimates for the parameters at each cut-point as well as the Fleiss kappa statistics for each.
+
+```{r}
+params <- tapModel::get_ordinal_tap(ratings)
+
+params
+```
+
+Here's how to plot the results.
+
+```{r}
+params |> 
+  select(t,a,p,CutPoint, type) |> 
+  gather(param, value, t, a, p) |> 
+  ggplot(aes(x = CutPoint, y = value, color = type, group = type)) +
+    geom_line() +
+    geom_point() +
+    facet_wrap(. ~ param)
+```

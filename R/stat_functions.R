@@ -257,13 +257,6 @@ plot_draw_densities <- function(draws){
   pdf <- draws |>
     gather(var, value, -likelihood)
 
-  # change title based on the vars present
-  if(any(str_detect(pdf$var,"p0"))) {
-    my_title <- "t-a0,a1-p0,p1"
-  } else {
-    my_title <- "t-a0,a1-p"
-  }
-
 
   param_density <- pdf |>
     group_by(var) %>%
@@ -307,7 +300,6 @@ plot_draw_densities <- function(draws){
                aes(x = value, label = round(value,2)),
                y = .5, color = "orange",
                label.padding = unit(0.15, "lines")) +
-    ggtitle(my_title) +
     theme_bw() +
     theme(text=element_text(size=15),
           axis.text.y=element_blank(),

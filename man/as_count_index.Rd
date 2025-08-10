@@ -7,7 +7,7 @@
 as_count_index(ratings)
 }
 \arguments{
-\item{ratings}{A dataframe with subject_id and rating}
+\item{ratings}{A dataframe with subject_id and binary rating}
 }
 \value{
 A data frame with columns subject_id, N_r, and N_c

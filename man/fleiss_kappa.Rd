@@ -8,7 +8,9 @@ fleiss_kappa(counts)
 }
 \arguments{
 \item{counts}{a data frame with columns N_r and N_c, representing number of
-raters for each subject and number of raters who rated class 1.}
+raters for each subject and number of raters who rated class 1, and n for the
+number of these (N_r, N_c) pairs. Optionally the row counts can be used, and the
+function will convert}
 }
 \value{
 a data frame with one row and columns for parameters: t, a, p, log likelihood: ll,

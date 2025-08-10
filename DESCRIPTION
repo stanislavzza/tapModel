@@ -1,7 +1,7 @@
 Package: tapModel
 Type: Package
 Title: Model inter-rater agreement
-Version: 0.1.0
+Version: 0.2.0
 Author: David Eubanks
 Maintainer: David Eubanks <stanislavzza@gmail.com>
 Description: Build three-parameter models of rater accuracy with library functions or the included Shiny app. 
@@ -12,3 +12,6 @@ RoxygenNote: 7.3.2
 Imports:
     tidyverse,
     shiny
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

@@ -22,9 +22,10 @@ functions {
 
 // The ratings summary (number of 1-ratings per case) and descriptives
 data {
-  int<lower=0> N;   // number of subjects
-  array[N] int<lower=0> R;   // number of raters fo a given subject
-  array[N] int count;  // count of ratings of category 1 for subject i
+  int<lower=0> N;   // number of rows of data
+  array[N] int<lower=0> N_r;   // number of raters for a count pair
+  array[N] int N_c;  // count of ratings of category 1 for count pair
+  array[N] int<lower=0> n;  // multiplicity of this (N_r, N_c) pair
 }
 
 // The parameter to estimate
@@ -47,8 +48,8 @@ model {
   p ~ uniform(0,1);
 
   for(i in 1:N) {  // for each subject rated
-    target += log_sum_exp(log(t)   + binomial_lpmf(count[i] | R[i], p_true(a,p)),
-                          log(1-t) + binomial_lpmf(count[i] | R[i], p_false(a,p)));
+    target += n[i] * log_sum_exp( log(t)   + binomial_lpmf(N_c[i] | N_r[i], p_true(a,p)),
+                            log(1-t) + binomial_lpmf(N_c[i] | N_r[i], p_false(a,p)));
   }
 }
 

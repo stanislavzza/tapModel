@@ -6,6 +6,9 @@
 #' function will convert
 #' @return a data frame with one row and columns for parameters: t, a, p, log likelihood: ll,
 #' and a true/false flag for degenerate solutions.
+#' @details
+#' The log likelihood returned is the expected value given the parameters, using `expected_bits_per_rating()`
+#'
 #' @export
 fleiss_kappa <- function(counts) {
 
@@ -33,10 +36,15 @@ fleiss_kappa <- function(counts) {
 
   # see problems to kappa=0
   kappa <- if_else(kappa < 0 | is.na(kappa) | is.nan(kappa), 0, kappa)
-  ll    <- -log_likelihood(c(stats$c, sqrt(kappa), stats$c), counts)
-  degenerate <- is_degenerate(c(stats$c, sqrt(kappa), stats$c)) || kappa <= 0
 
-  return(data.frame(t = stats$c, a = sqrt(kappa), p = stats$c, ll = ll, degenerate = degenerate))
+  t <- stats$c
+  a <- sqrt(kappa)
+  p <- stats$c # unbiased means t = p = c
+
+  ll    <- bits_per_count(counts, params = list(t = t, a = a, p = p))
+  degenerate <- is_degenerate(c(t, a, p)) || kappa <= 0
+
+  return(data.frame(t = t, a = a, p = p, ll = ll, degenerate = degenerate))
 }
 
 #' Information bits from a binary vector
@@ -47,25 +55,6 @@ information_bits <- function(x){
  if_else(x == 0 | x== 1, 0, -x*log2(x) - (1-x)*log2(1-x))
 }
 
-#' Signal and noise
-#' @param params the three average t-a-p parameters in a named list. If vectors
-#' are provided instead, they will be averaged.
-#' @return a data frame with columns for information from sources signal, noise,
-#' and the total log likelihood per rating
-#' @export
-est_signal_noise <- function(params){
-
-  t <- mean(params$t)
-  a <- mean(params$a)
-  p <- mean(params$p)
-
-  tibble(I_signal = a*information_bits(t),
-         I_noise =  (1-a)*information_bits(p),
-         I_sum = I_signal + I_noise,
-         ll = information_bits(a*t + (1-a)*p))
-}
-
-
 #' rater entropy
 #' @description Calculates rater-specific entropy s-dot, which can be averaged
 #' to estimate the average rater entropy.
@@ -74,14 +63,32 @@ est_signal_noise <- function(params){
 #' OR the results of `fit_counts(counts)` with the average t-a-p parameters.
 #' @return The same dataframe with an additional column s_dot for the
 #' rater entropy.
+#' @details This is experimental. It attempts to normalize bits per rating of
+#' entropy by artificially setting t = .5, to remove the effect of the Class 1
+#' proportion.
+#' There are several functions that return bits per rating. Here's a
+#' guide. `bits_per_rating(rating_params)` is the hierarchical version, using
+#' the fitted model from `fit_ratings()` or `fit_ratings_mcmc()`. For the average
+#' three-parameter t-a-p model use `bits_per_count(counts, params)`, which is
+#' the same as upscaling the counts to rating_params and then using `bits_per_rating()`,
+#' e.g. `counts |> as_rating_params(params) |> bits_per_rating()`, but it's a little
+#' faster to do it directly. There's also a calculation for the expected value
+#' of the bits per rating for a parameter set, using `params |> expected_bits_per_rating()`.
+#' The `bits_per_rating()` function uses an intermediate function `ll_per_subject(rating_params)`,
+#' which gives a subject-specific result in log likelihood, base e. This can be
+#' useful for other purposes.
 #' @export
 rater_entropy <- function(rater_params){
 
+  xlogx <- function(x){
+    if_else(x == 0, 0, -x*log(x)/log(2))
+  }
+
     rater_params |>
-    mutate(s_dot = -.5*( (1-(1-a)*p)*log2(1-(1-a)*p) +
-                          (1-a)*p *log2((1-a)*p ) +
-                          (1-a)*(1-p)*log2((1-a)*(1-p)) +
-                          (a + (1-a)*p)*log2(a + (1-a)*p)))
+    mutate(s_dot = .5*( xlogx(a +(1-a)*(1-p))+
+                         xlogx((1-a)*p) +
+                         xlogx( (1-a)*(1-p)) +
+                         xlogx(a + (1-a)*p)))
 }
 
 #' bernoulli trial

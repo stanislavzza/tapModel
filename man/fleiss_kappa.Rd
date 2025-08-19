@@ -19,3 +19,6 @@ and a true/false flag for degenerate solutions.
 \description{
 Function to calculate Fleiss' kappa for binary data
 }
+\details{
+The log likelihood returned is the expected value given the parameters, using `expected_bits_per_rating()`
+}

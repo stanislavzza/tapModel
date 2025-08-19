@@ -65,9 +65,9 @@ subject_calibration <- function(rating_params, n_sims = 30){
 
   BPR = bits_per_rating(rating_params)
 
-  my_title <- str_c("avg t=", round(mean(rating_params$t),2),
-                    ", avg a=", round(mean(rating_params$a),2),
-                    ", avg p=", round(mean(rating_params$p),2))
+  my_title <- str_c("(t,a,p)=(", round(mean(rating_params$t),2),
+                    ",", round(mean(rating_params$a),2),
+                    ",", round(mean(rating_params$p),2),")")
 
   my_subtitle <- str_c("MAE=",round(MAE, 3),
                        "  RMSE=", round(RMSE, 3),
@@ -152,9 +152,9 @@ rater_calibration <- function(rating_params, bins = 10, labels = FALSE){
 
   BPR = bits_per_rating(rating_params)
 
-  my_title <- str_c("avg t=", round(mean(rating_params$t),2),
-                    ", avg a=", round(mean(rating_params$a),2),
-                    ", avg p=", round(mean(rating_params$p),2))
+  my_title <- str_c("(t,a,p)=(", round(mean(rating_params$t),2),
+                    ",", round(mean(rating_params$a),2),
+                    ",", round(mean(rating_params$p),2),")")
 
   my_subtitle <- str_c("MAE=",round(MAE, 3),
                        "  RMSE=", round(RMSE, 3),
@@ -233,9 +233,9 @@ rating_calibration <- function(rating_params, bins = 10){
 
   BPR = bits_per_rating(rating_params)
 
-  my_title <- str_c("avg t=", round(mean(rating_params$t),2),
-                    ", avg a=", round(mean(rating_params$a),2),
-                    ", avg p=", round(mean(rating_params$p),2))
+  my_title <- str_c("(t,a,p)=(", round(mean(rating_params$t),2),
+                    ",", round(mean(rating_params$a),2),
+                    ",", round(mean(rating_params$p),2),")")
 
   my_subtitle <- str_c("MAE=",round(MAE, 3),
                        "  RMSE=", round(RMSE, 3),
@@ -692,11 +692,16 @@ compare_model_to_observed <- function(model_params, observed_data = NULL, n_sims
 #' solver like `fit_ratings(ratings)` or `fit_ratings_mcmc(ratings)$rating_params`
 #' @param n_sim The number of simulations to run, defaulting to 10, since it can
 #' be time-consuming.
+#' @param method One of "model" or "sample". If the former, data sets are simulated
+#' from the parameters. If the latter, data sets are sampled without replacement
+#' from the original ratings at the specified rate, defaulting to .5.
+#' @param sample_rate Only used when method = "sample". Specifies the sample rate
+#' from the original data, defaulting to .5.
 #' @return a list with plot_a = box plot of the accuracy estimates, plot_p for
 #' the p_j parameters, and rater_params = a dataframe with simulation values for
 #' each a_j, p_j parameter.
 #' @export
-estimate_rater_parameter_error <- function(rating_params, n_sim = 10){
+estimate_rater_parameter_error <- function(rating_params, n_sim = 10, method = "model", sample_rate = .5){
   N_ratings <- nrow(rating_params)
 
   # save the initial params
@@ -704,19 +709,44 @@ estimate_rater_parameter_error <- function(rating_params, n_sim = 10){
 
   # initialize a place to store results
   rater_results <- list()
-  for(sim in 1:n_sim){
 
-    # simulate ratings for the hierarchical model
-    sim_ratings <- generate_ti_aj_pj_ratings(rating_params = rating_params)
+  #### Model-based variation
+  if(method == "model"){
 
-    # estimate the t-a-p parameters and get a, p
-    sim_params <- fit_ratings(sim_ratings)
+    for(sim in 1:n_sim){
 
-    a_j <- tapModel::pull_rating_params(sim_params)$raters |>
-      select(rater_id, a_sim = a, p_sim = p)
+      # simulate ratings for the hierarchical model
+      sim_ratings <- generate_ti_aj_pj_ratings(rating_params = rating_params)
 
-    # append a_j to the results list
-    rater_results[[sim]] <- a_j
+      # estimate the t-a-p parameters and get a, p
+      sim_params <- fit_ratings(sim_ratings)
+
+      a_j <- tapModel::pull_rating_params(sim_params)$raters |>
+        select(rater_id, a_sim = a, p_sim = p)
+
+      # append a_j to the results list
+      rater_results[[sim]] <- a_j
+    }
+  } else if(method == "sample") {
+
+    for(sim in 1:n_sim){
+
+      # simulate ratings for the hierarchical model
+      sim_ratings <-  rating_params |>
+        slice_sample(prop = sample_rate)
+
+      # estimate the t-a-p parameters and get a, p
+      sim_params <- fit_ratings(sim_ratings)
+
+      a_j <- tapModel::pull_rating_params(sim_params)$raters |>
+        select(rater_id, a_sim = a, p_sim = p)
+
+      # append a_j to the results list
+      rater_results[[sim]] <- a_j
+    }
+
+  } else {
+    stop("The method must be one of 'model' or 'sample'")
   }
 
   # convert the list into a dataframe with column for sim number
@@ -836,7 +866,7 @@ dk_horizon <- function(N_s, N_r, a = 0, tp = .5, use_fleiss = TRUE, n_sim = 500)
 
 #' Simulate sampling error with exact formulas
 #' @description Range of accuracy estimates for data simulated with various
-#' accuracies and the other paraters fixed. This function uses the exact
+#' accuracies and the other parameters fixed. This function uses the exact
 #' formulas, but is limited to the unbiased rater case (t = p). This function
 #' returns a either the data or a plot.
 #' @param N_s_vals A vector of one or more values for N_s, the number of subjects
@@ -889,17 +919,10 @@ simulate_exact_fit <- function(N_s_vals = c(20,100,300), N_r_vals = c(2,5,10),
                                                               p = tp))
     counts <- as_counts(ratings)
 
-    # the parameters are sorted by N_r, so
-    # for efficiency only generate coefs when N_r changes
-    if(!use_fleiss  && N_r_old != N_r){
-      N_r_old = N_r
-      exact_coefs <- tapModel:::exact_accuracy_coefs(N_r, tp)$estimate
-    }
-
     if(use_fleiss){  # use fleiss kappa
       param_grid$a_sim[i] <- tapModel::fleiss_kappa(counts)$a
     } else {
-      param_grid$a_sim[i] <- tapModel::exact_accuracy(counts, tp, exact_coefs)
+      param_grid$a_sim[i] <- tapModel::exact_accuracy(counts, tp)
     }
 
   }
@@ -909,8 +932,14 @@ simulate_exact_fit <- function(N_s_vals = c(20,100,300), N_r_vals = c(2,5,10),
   g <- param_grid |>
     ggplot(aes(x = a, y = a_sim, group = a)) +
     geom_boxplot() +
+    stat_summary(
+      fun = mean,
+      geom = "point",
+      shape = 18,        # solid diamond
+      size = 2,
+      color = "red"
+    ) +
     geom_abline() +
-    geom_smooth(aes(x = a, y = a_sim, group = 1), se = FALSE, color = "steelblue", linewidth = .9) +
     facet_grid(N_s ~ N_r)
 
   return(g)

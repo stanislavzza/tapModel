@@ -17,3 +17,18 @@ The average bits per rating of log likelihood
 Given a rating_param data frame from `fit_ratings` or `fit_ratings_mcmc`,
 return the average bits per rating of log likelihood using a t_i-a_j-p_j model.
 }
+\details{
+There are several functions that return bits per rating. Here's a
+guide. `bits_per_rating(rating_params)` is the hierarchical version, using
+the fitted model from `fit_ratings()` or `fit_ratings_mcmc()`. For the average
+three-parameter t-a-p model use `bits_per_count(counts, params)`, which is
+the same as upscaling the counts to rating_params and then using `bits_per_rating()`,
+e.g. `counts |> as_rating_params(params) |> bits_per_rating()`, but it's a little
+faster to do it directly. There's also a calculation for the expected value
+of the bits per rating for a parameter set, using `params |> expected_bits_per_rating()`.
+The `bits_per_rating()` function uses an intermediate function `ll_per_subject(rating_params)`,
+which gives a subject-specific result in log likelihood, base e. This can be
+useful for other purposes. Finally, there is a `rater_entropy(rating_params)`
+function that returns the bits per rating with t set to .5, to account
+only for rater characteristics.
+}

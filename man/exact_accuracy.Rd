@@ -30,5 +30,7 @@ choices to have this function calculate the coefficients for you, in which
 case tp must be specified, or provide the pre-calculated coefficients, e.g. if
 you're doing a lot of calculations with them in a simulation. The functions
 that start with "exact_" are used for closed-form
-calculation of accuracy.
+calculation of accuracy. The use_fleiss = FALSE case will attempt to use the
+exact coefficients, but this is numerically unstable. It's mostly here for
+theory development. See the code in the Appendix for a good use for this.
 }

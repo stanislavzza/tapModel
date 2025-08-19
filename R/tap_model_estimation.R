@@ -9,6 +9,12 @@
 #' expectation-maximization, or use "optim" for a direct optimization
 #' @return a data frame with columns for parameters: t, a, p, and log likelihood
 #' of the solution, and a flag for degeneracy
+#' @details
+#' The log likelihood returned is the expected value given the parameters, using
+#' `expected_bits_per_rating()`. If you want the empirical value given the ratings
+#' use `ratings |> as_rating_params(params) |> estimate_ti() |> bits_per_rating()`,
+#' which upscales the parameters to a rating_params data frame with a_j = a and
+#' p_j = p, and then estimates t_i from that before calculating log likelihood.
 #' @export
 fit_counts <- function(counts, method = "EM"){
   # start with the middle case
@@ -19,10 +25,13 @@ fit_counts <- function(counts, method = "EM"){
     params <- find_solution(counts, fence_params)
   }
 
+  # return the per-rating LL
+  bpr <- bits_per_count(counts, params)
+
   return(data.frame( t = params[1],
                      a = params[2],
                      p = params[3],
-                     ll = params[4],
+                     ll = bpr,
                      degenerate = is_degenerate(params)))
 
 }
@@ -36,7 +45,9 @@ fit_counts <- function(counts, method = "EM"){
 #' alphabetically, so "11" would sort before "2." If the ratings are numeric,
 #' they will be sorted numerically.
 #' @return a data frame with columns for each cut point between ratings,
-#' parameters: t, a, p, and ll for the t-a-p model and the Fleiss kappa.
+#' parameters: t, a, p, and ll for the t-a-p model and the Fleiss kappa, as
+#' well as a column to flag degenerate cases, where one of the parameters is
+#' zero or one.
 #' @export
 fit_ordinal_tap <- function(ordinal_ratings){
   rating_values <- sort(unique(ordinal_ratings$rating))
@@ -54,25 +65,14 @@ fit_ordinal_tap <- function(ordinal_ratings){
     counts <- ratings |>
       as_counts()
 
-    tap_params <- fit_counts(counts) |>
-      select(t, a, p)
-
-    # replace ll with standardized bits per rating
-    tap_params$ll <- ratings |>
-      as_rating_params(tap_params) |>
-      bits_per_rating()
+    tap_params <- fit_counts(counts)
 
     tap_params <- tap_params |>
       mutate(CutPoint = str_c(lower_rating,"|", upper_rating),
              type = "t-a-p") |>
       relocate(type, CutPoint)
 
-    fleiss_params <- fleiss_kappa(counts) |>
-      select(t, a, p)
-
-    fleiss_params$ll <- ratings |>
-      as_rating_params(fleiss_params) |>
-      bits_per_rating()
+    fleiss_params <- fleiss_kappa(counts)
 
     fleiss_params <- fleiss_params |>
       mutate(CutPoint = str_c(lower_rating,"|", upper_rating),
@@ -233,6 +233,19 @@ estimate_aj_pj <- function(rating_params){
 #' t, a, and p parameter for the rating.
 #' @return The rating_params data frame with column ll = log likelihood added.
 #' The log base is e, so if you want bits divide by -log(2)
+#' @details There are several functions that return bits per rating. Here's a
+#' guide. `bits_per_rating(rating_params)` is the hierarchical version, using
+#' the fitted model from `fit_ratings()` or `fit_ratings_mcmc()`. For the average
+#' three-parameter t-a-p model use `bits_per_count(counts, params)`, which is
+#' the same as upscaling the counts to rating_params and then using `bits_per_rating()`,
+#' e.g. `counts |> as_rating_params(params) |> bits_per_rating()`, but it's a little
+#' faster to do it directly. There's also a calculation for the expected value
+#' of the bits per rating for a parameter set, using `params |> expected_bits_per_rating()`.
+#' The `bits_per_rating()` function uses an intermediate function `ll_per_subject(rating_params)`,
+#' which gives a subject-specific result in log likelihood, base e. This can be
+#' useful for other purposes. Finally, there is a `rater_entropy(rating_params)`
+#' function that returns the bits per rating with t set to .5, to account
+#' only for rater characteristics.
 #' @export
 ll_per_subject <- function(rating_params){
 
@@ -241,7 +254,7 @@ ll_per_subject <- function(rating_params){
   N <- nrow(rating_params)
 
   ll_stats <- rating_params |>
-    mutate(  lpi_00 = log(1-(1-a)*p + eps),
+    mutate(  lpi_00 = log(a+(1-a)*(1-p) + eps),
              lpi_10 = log((1-a)*(1-p) + eps),
              lpi_01 = log((1-a)*p + eps),
              lpi_11 = log(a + (1-a)*p+ eps) ) |>
@@ -266,6 +279,19 @@ ll_per_subject <- function(rating_params){
 #' return the average bits per rating of log likelihood using a t_i-a_j-p_j model.
 #' @param rating_params A data frame with binary subject_id, rating, and a
 #' t, a, and p parameter for the rating.
+#' @details There are several functions that return bits per rating. Here's a
+#' guide. `bits_per_rating(rating_params)` is the hierarchical version, using
+#' the fitted model from `fit_ratings()` or `fit_ratings_mcmc()`. For the average
+#' three-parameter t-a-p model use `bits_per_count(counts, params)`, which is
+#' the same as upscaling the counts to rating_params and then using `bits_per_rating()`,
+#' e.g. `counts |> as_rating_params(params) |> bits_per_rating()`, but it's a little
+#' faster to do it directly. There's also a calculation for the expected value
+#' of the bits per rating for a parameter set, using `params |> expected_bits_per_rating()`.
+#' The `bits_per_rating()` function uses an intermediate function `ll_per_subject(rating_params)`,
+#' which gives a subject-specific result in log likelihood, base e. This can be
+#' useful for other purposes. Finally, there is a `rater_entropy(rating_params)`
+#' function that returns the bits per rating with t set to .5, to account
+#' only for rater characteristics.
 #' @return The average bits per rating of log likelihood
 #' @export
 bits_per_rating <- function(rating_params){
@@ -279,6 +305,92 @@ bits_per_rating <- function(rating_params){
   return(avg_bits)
 }
 
+#' log likelihood by rating
+#' @description Given `counts` from `ratings |> as_counts()` and `params` from
+#' `counts |> fit_counts()`, returns the average bits per rating.
+#' return the average bits per rating of log likelihood using a t_i-a_j-p_j model.
+#' @param rating_params A data frame with binary subject_id, rating, and a
+#' t, a, and p parameter for the rating.
+#' @return The average bits per rating of log likelihood
+#' @details There are several functions that return bits per rating. Here's a
+#' guide. `bits_per_rating(rating_params)` is the hierarchical version, using
+#' the fitted model from `fit_ratings()` or `fit_ratings_mcmc()`. For the average
+#' three-parameter t-a-p model use `bits_per_count(counts, params)`, which is
+#' the same as upscaling the counts to rating_params and then using `bits_per_rating()`,
+#' e.g. `counts |> as_rating_params(params) |> bits_per_rating()`, but it's a little
+#' faster to do it directly. There's also a calculation for the expected value
+#' of the bits per rating for a parameter set, using `params |> expected_bits_per_rating()`.
+#' The `bits_per_rating()` function uses an intermediate function `ll_per_subject(rating_params)`,
+#' which gives a subject-specific result in log likelihood, base e. This can be
+#' useful for other purposes. Finally, there is a `rater_entropy(rating_params)`
+#' function that returns the bits per rating with t set to .5, to account
+#' only for rater characteristics.
+#' @export
+bits_per_count <- function(counts, params) {
+  verify_counts(counts)
+  verify_params(params)
+  eps <- 1e-15
+
+  N <- sum(counts$n*counts$N_r)
+
+  t <- params$t
+  a <- params$a
+  p <- params$p
+
+  counts |>
+    mutate(  lpi_00 = log(a+(1-a)*(1-p) + eps),
+             lpi_10 = log((1-a)*(1-p) + eps),
+             lpi_01 = log((1-a)*p + eps),
+             lpi_11 = log(a + (1-a)*p+ eps),
+             sub_00 = (N_r - N_c)*lpi_00,
+             sub_10 = (N_r - N_c)*lpi_10,
+             sub_01 = N_c*lpi_01,
+             sub_11 = N_c*lpi_11) |>
+    estimate_tu(params) |>
+    rowwise() |>
+    mutate(l1 = log_t_u + sub_11 + sub_10,
+           l0 = log(1 - t_u + eps) + sub_01 + sub_00,
+           ll= LSE_R(c(l1,l0))) |>
+    ungroup() |>
+    summarize( -sum(ll*n)/N/log(2)) |>
+    pull()
+
+}
+
+#' expected bits per rating from avg params
+#' @param params A params vector with just t, a, and p
+#' @return a scalar, the log likelihood in bits
+#' @details There are several functions that return bits per rating. Here's a
+#' guide. `bits_per_rating(rating_params)` is the hierarchical version, using
+#' the fitted model from `fit_ratings()` or `fit_ratings_mcmc()`. For the average
+#' three-parameter t-a-p model use `bits_per_count(counts, params)`, which is
+#' the same as upscaling the counts to rating_params and then using `bits_per_rating()`,
+#' e.g. `counts |> as_rating_params(params) |> bits_per_rating()`, but it's a little
+#' faster to do it directly. There's also a calculation for the expected value
+#' of the bits per rating for a parameter set, using `params |> expected_bits_per_rating()`.
+#' The `bits_per_rating()` function uses an intermediate function `ll_per_subject(rating_params)`,
+#' which gives a subject-specific result in log likelihood, base e. This can be
+#' useful for other purposes. Finally, there is a `rater_entropy(rating_params)`
+#' function that returns the bits per rating with t set to .5, to account
+#' only for rater characteristics.
+#' @export
+expected_bits_per_rating <- function(params){
+  verify_params(params)
+
+  xlogx <- function(x){
+    if_else(x == 0, 0, -x*log(x)/log(2))
+  }
+
+  t = params$t
+  a = params$a
+  p = params$p
+  t_ = 1-t
+  a_ = 1-a
+  p_ = 1-p
+
+  return(t*( xlogx(a_*p_) + xlogx(a+a_*p) ) +
+         t_*( xlogx(a + a_*p_) + xlogx(a_*p)))
+}
 
 #' fit ratings to generate t_i, a_j, p_j for each rating
 #' @param ratings a data frame with columns subject_id, rating, and rater_id
@@ -387,9 +499,8 @@ pull_rating_params <- function(rating_params){
   return(list(subjects = subjects, raters = raters))
 }
 
-# ############################################################################
-# Closed-form (exact) accuracy calculations
-# ############################################################################
+
+######################### Exact accuracy calculations #########
 
 #' get count probabilities (private)
 #' @description
@@ -513,14 +624,16 @@ exact_accuracy_coefs <- function(N_r,tp){
 #' case tp must be specified, or provide the pre-calculated coefficients, e.g. if
 #' you're doing a lot of calculations with them in a simulation. The functions
 #' that start with "exact_" are used for closed-form
-#' calculation of accuracy.
+#' calculation of accuracy. The use_fleiss = FALSE case will attempt to use the
+#' exact coefficients, but this is numerically unstable. It's mostly here for
+#' theory development. See the code in the Appendix for a good use for this.
 #' @export
 exact_accuracy <- function(counts, tp = .5){
 
   # are all the N_r the same?
   if(any(counts$N_r != first(counts$N_r))) stop("All N_r must be the same")
 
-  count_coefs <- exact_accuracy_coefs(N_r, tp)
+  count_coefs <- exact_accuracy_coefs(counts$N_r, tp)
 
   count_probs <- counts |>
     mutate(n = n/sum(n)) |>

@@ -51,37 +51,23 @@ generate_sample_ratings <- function(N_s = 100, N_r = 5,
 }
 
 
-#' get ratings that have a given distribution
+#' Generate ratings that have a given distribution
 #' @param n_subjects number of subjects
 #' @param n_raters number of raters per subject on average
 #' @param params t, a, and p, possibly including a0,a1,p0,p1 in a named list
 #' @return a data frame with ratings and parameters, including the input t-a-p averages, the
 #' random effect parameters p_i and a_j and the discrete random variables T_i, P_ij, and A_ij.
-#' @details This function generates ratings for a set of subjects based on a t-a-p
-#' model. It uses t to determine the 0 or 1 truth values for each subject,
-#' creates random effects p_i and a_j for each subject and rater, respectively, using a beta distribution.
+#' @details This function attempts to exactly replicate the density function
+#' specified by the parameters. This can be useful in tests where you want to
+#' avoid sampling effects.
 #' @export
-generate_exact_ratings <- function(N_s, N_r, params = list(t = .5,
-                                                           a = .7,
-                                                           p = .5)) {
-  #unpack params
-  t <- params$t
-
-  if(!is.null(params$a)){
-    a0 <- params$a
-    a1 <- params$a
-  } else {
-    a0 <- params$a0
-    a1 <- params$a1
-  }
-
-  if(!is.null(params$p)){
-    p0 <- params$p
-    p1 <- params$p
-  } else {
-    p0 <- params$p0
-    p1 <- params$p1
-  }
+generate_exact_ratings <- function(N_s = 100, N_r = 5,
+                                   params = list(t = .5,
+                                                 a = .7,
+                                                 p = .5)) {
+  # complete param list and put into environment
+  params <- verify_params(params, expand = TRUE)
+  list2env(params, envir = environment())
 
   # how many values are in the distro?
 

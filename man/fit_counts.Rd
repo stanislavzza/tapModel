@@ -23,3 +23,10 @@ Fit the t-a-p model to counts. Start with the the middle of the
 parameter space in looking #' for a solution. If it's degenerate it looks
 around the edges of the space for a non-degenerate solution.
 }
+\details{
+The log likelihood returned is the expected value given the parameters, using
+`expected_bits_per_rating()`. If you want the empirical value given the ratings
+use `ratings |> as_rating_params(params) |> estimate_ti() |> bits_per_rating()`,
+which upscales the parameters to a rating_params data frame with a_j = a and
+p_j = p, and then estimates t_i from that before calculating log likelihood.
+}

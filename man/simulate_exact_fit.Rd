@@ -40,7 +40,7 @@ a facet grid of boxplots along the a axis
 }
 \description{
 Range of accuracy estimates for data simulated with various
-accuracies and the other paraters fixed. This function uses the exact
+accuracies and the other parameters fixed. This function uses the exact
 formulas, but is limited to the unbiased rater case (t = p). This function
 returns a either the data or a plot.
 }

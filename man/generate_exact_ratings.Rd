@@ -2,9 +2,13 @@
 % Please edit documentation in R/simulate_ratings.R
 \name{generate_exact_ratings}
 \alias{generate_exact_ratings}
-\title{get ratings that have a given distribution}
+\title{Generate ratings that have a given distribution}
 \usage{
-generate_exact_ratings(N_s, N_r, params = list(t = 0.5, a = 0.7, p = 0.5))
+generate_exact_ratings(
+  N_s = 100,
+  N_r = 5,
+  params = list(t = 0.5, a = 0.7, p = 0.5)
+)
 }
 \arguments{
 \item{params}{t, a, and p, possibly including a0,a1,p0,p1 in a named list}
@@ -18,10 +22,10 @@ a data frame with ratings and parameters, including the input t-a-p averages, th
 random effect parameters p_i and a_j and the discrete random variables T_i, P_ij, and A_ij.
 }
 \description{
-get ratings that have a given distribution
+Generate ratings that have a given distribution
 }
 \details{
-This function generates ratings for a set of subjects based on a t-a-p
-model. It uses t to determine the 0 or 1 truth values for each subject,
-creates random effects p_i and a_j for each subject and rater, respectively, using a beta distribution.
+This function attempts to exactly replicate the density function
+specified by the parameters. This can be useful in tests where you want to
+avoid sampling effects.
 }

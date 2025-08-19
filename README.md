@@ -19,8 +19,7 @@ After installation, load the package with:
 ```r
 library(tapModel)
 ```
-To get started, you can browse vignettes using
 
-```r
-browseVignettes("tapModel")
-```
+To get started, see the [kappaZoo.com](https://kappazoo.com), where you can find
+an explanation of the main ideas, some theory, examples, and a guide to the 
+package.

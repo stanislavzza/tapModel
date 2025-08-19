@@ -19,3 +19,19 @@ rater entropy.
 Calculates rater-specific entropy s-dot, which can be averaged
 to estimate the average rater entropy.
 }
+\details{
+This is experimental. It attempts to normalize bits per rating of
+entropy by artificially setting t = .5, to remove the effect of the Class 1
+proportion.
+There are several functions that return bits per rating. Here's a
+guide. `bits_per_rating(rating_params)` is the hierarchical version, using
+the fitted model from `fit_ratings()` or `fit_ratings_mcmc()`. For the average
+three-parameter t-a-p model use `bits_per_count(counts, params)`, which is
+the same as upscaling the counts to rating_params and then using `bits_per_rating()`,
+e.g. `counts |> as_rating_params(params) |> bits_per_rating()`, but it's a little
+faster to do it directly. There's also a calculation for the expected value
+of the bits per rating for a parameter set, using `params |> expected_bits_per_rating()`.
+The `bits_per_rating()` function uses an intermediate function `ll_per_subject(rating_params)`,
+which gives a subject-specific result in log likelihood, base e. This can be
+useful for other purposes.
+}

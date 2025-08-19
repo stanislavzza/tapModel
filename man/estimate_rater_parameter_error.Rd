@@ -4,7 +4,12 @@
 \alias{estimate_rater_parameter_error}
 \title{recover rater parameters from simulated data}
 \usage{
-estimate_rater_parameter_error(rating_params, n_sim = 10)
+estimate_rater_parameter_error(
+  rating_params,
+  n_sim = 10,
+  method = "model",
+  sample_rate = 0.5
+)
 }
 \arguments{
 \item{rating_params}{The ratings data with subject_id, rating, and rater_id
@@ -13,6 +18,13 @@ solver like `fit_ratings(ratings)` or `fit_ratings_mcmc(ratings)$rating_params`}
 
 \item{n_sim}{The number of simulations to run, defaulting to 10, since it can
 be time-consuming.}
+
+\item{method}{One of "model" or "sample". If the former, data sets are simulated
+from the parameters. If the latter, data sets are sampled without replacement
+from the original ratings at the specified rate, defaulting to .5.}
+
+\item{sample_rate}{Only used when method = "sample". Specifies the sample rate
+from the original data, defaulting to .5.}
 }
 \value{
 a list with plot_a = box plot of the accuracy estimates, plot_p for

@@ -16,7 +16,9 @@ they will be sorted numerically.}
 }
 \value{
 a data frame with columns for each cut point between ratings,
-parameters: t, a, p, for the t-a-p model and the Fleiss kappa.
+parameters: t, a, p, and ll for the t-a-p model and the Fleiss kappa, as
+well as a column to flag degenerate cases, where one of the parameters is
+zero or one.
 }
 \description{
 t-a-p coefficients over an ordinal scale

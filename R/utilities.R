@@ -29,7 +29,7 @@ as_binary_ratings <- function(raw_ratings, in_class){
     select(subject_id, rating)
 
   # if we have a third column, assume it's the rater ID
-  if(ncol(raw_ratings) == 3){
+  if(ncol(raw_ratings) > 2){
     rater_id <- raw_ratings |>
       na.omit() |>
       select(rater_id = 3)
@@ -259,9 +259,6 @@ as_rating_params <- function(ratings, params){
 #' with a column n. This is useful for efficiently fitting the t-a-p model.
 #' @export
 as_counts <- function(ratings){
-
-  # make sure it's the right format
-  verify_ratings(ratings)
 
   ratings |>
     group_by(subject_id) |>

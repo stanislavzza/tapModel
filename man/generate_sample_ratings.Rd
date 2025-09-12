@@ -14,7 +14,9 @@ generate_sample_ratings(
 \arguments{
 \item{N_s}{number of subjects}
 
-\item{N_r}{number of raters per subject on average}
+\item{N_r}{number of raters per subject}
+
+\item{params}{A list with the t, a, p values, which must be between zero and one}
 
 \item{details}{logical defaulting to FALSE. If TRUE, return the full set
 of parameters to include the T_i, P_ij, and A_ij values.}

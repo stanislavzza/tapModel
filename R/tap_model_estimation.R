@@ -170,7 +170,7 @@ estimate_ti <- function(rating_params){
              lpi_11 = log(a + (1-a)*p)+ eps) |>
       # now do the subject aggregation
       group_by(subject_id) |>
-      summarize(t = first(t), # same value t_i for single subject
+      summarize(#t = first(t), # same value t_i for single subject
                 C0 = exp(sum( (rating == 0)*lpi_00 + (rating == 1)*lpi_01)),
                 C1 = exp(sum( (rating == 0)*lpi_10 + (rating == 1)*lpi_11))) |>
       mutate(t = C1/(C0 + C1)) |>

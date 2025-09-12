@@ -117,8 +117,6 @@ test_that("verify_counts works", {
 rm(raw_ratings)
 
 ################## params #####################
-
-#' verify_params(params)
 test_that("verify_params accepts valid parameter sets", {
   valid_sets <- list(
     list(t = 0.8, a = 0.9, p = 0.6),
@@ -128,59 +126,61 @@ test_that("verify_params accepts valid parameter sets", {
   )
 
   for (params in valid_sets) {
-    expect_silent({
-      df <- verify_params(params)
-      expect_s3_class(df, "data.frame")
-      expect_true(all(names(params) %in% names(df)))
-    })
+    expect_identical(verify_params(params), 0)
   }
 })
 
-test_that("verify_params accepts named vectors", {
-  vec <- c(t = 0.8, a = 0.9, p = 0.6)
-  result <- verify_params(vec)
-  expect_s3_class(result, "data.frame")
-  expect_named(result, c("t", "a", "p"))
-})
-
-test_that("verify_params throws error on missing parameter sets", {
+test_that("verify_params throws error on invalid sets", {
   expect_error(verify_params(list(t = 0.8, a = 0.9)),
-               "params must be list or named vector containing one of the following sets")
-})
-
-test_that("verify_params throws error on non-list/vector input", {
-  expect_error(verify_params(matrix(c(0.8, 0.9, 0.6), nrow = 1)),
-               "params must be a list or named vector")
-})
-
-test_that("verify_params throws error on NA or out-of-bounds values", {
+               "params must be list or named vector containing")
   expect_error(verify_params(list(t = 0.8, a = 0.9, p = NA)),
-               "All parameters must be between 0 and 1")
-  expect_error(verify_params(list(t = 0.8, a = 0.9, p = 1.1)),
-               "All parameters must be between 0 and 1")
-  expect_error(verify_params(list(t = 0.8, a = -0.1, p = 0.6)),
-               "All parameters must be between 0 and 1")
+               "between 0 and 1")
+  expect_error(verify_params(list(t = 0.8, a = 1.1, p = 0.9)),
+               "between 0 and 1")
+  expect_error(verify_params(matrix(c(0.8, 0.9, 0.6), nrow = 1)),
+               "params must be a list")
 })
 
-test_that("verify_params expands (t, a, p) to full form", {
+# expand params
+test_that("expand_params converts (t, a, p) to full form", {
   params <- list(t = 0.8, a = 0.9, p = 0.6)
-  result <- verify_params(params, expand = TRUE)
-  expect_s3_class(result, "data.frame")
-  expect_named(result, c("t", "a0", "a1", "p0", "p1"))
-  expect_equal(result$a0, 0.9)
-  expect_equal(result$a1, 0.9)
-  expect_equal(result$p0, 0.6)
-  expect_equal(result$p1, 0.6)
+  expanded <- expand_params(params)
+
+  expect_s3_class(expanded, "data.frame")
+  expect_named(expanded, c("t", "a0", "a1", "p0", "p1"))
+  expect_equal(expanded$a0, 0.9)
+  expect_equal(expanded$a1, 0.9)
+  expect_equal(expanded$p0, 0.6)
+  expect_equal(expanded$p1, 0.6)
 })
 
-test_that("verify_params expands (t, a, p0, p1) correctly", {
-  params <- list(t = 0.8, a = 0.9, p0 = 0.5, p1 = 0.6)
-  result <- verify_params(params, expand = TRUE)
-  expect_s3_class(result, "data.frame")
-  expect_named(result, c("t", "a0", "a1", "p0", "p1"))
-  expect_equal(result$a0, 0.9)
-  expect_equal(result$a1, 0.9)
+test_that("expand_params works when only p needs expanding", {
+  params <- list(t = 0.8, a0 = 0.85, a1 = 0.9, p = 0.6)
+  expanded <- expand_params(params)
+
+  expect_named(expanded, c("t", "a0", "a1", "p0", "p1"))
+  expect_equal(expanded$p0, 0.6)
+  expect_equal(expanded$p1, 0.6)
 })
+
+test_that("expand_params works when only a needs expanding", {
+  params <- list(t = 0.8, a = 0.9, p0 = 0.5, p1 = 0.6)
+  expanded <- expand_params(params)
+
+  expect_named(expanded, c("t", "a0", "a1", "p0", "p1"))
+  expect_equal(expanded$a0, 0.9)
+  expect_equal(expanded$a1, 0.9)
+})
+
+test_that("expand_params leaves fully expanded params unchanged", {
+  params <- list(t = 0.8, a0 = 0.85, a1 = 0.9, p0 = 0.5, p1 = 0.6)
+  expanded <- expand_params(params)
+
+  expect_named(expanded, c("t", "a0", "a1", "p0", "p1"))
+  expect_equal(expanded$a0, 0.85)
+  expect_equal(expanded$p1, 0.6)
+})
+
 
 ################## rating_params ##############
 

@@ -13,8 +13,7 @@ verify_params(params, expand = FALSE)
 list. This can be convenient for LL calculations to simplify the formula.}
 }
 \value{
-The original params as a data frame if formatted correctly, or an
-error message.
+Zero if successful or an error message if not.
 }
 \description{
 Verify that the t-a-p parameters are in the right format.

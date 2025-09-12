@@ -612,7 +612,7 @@ compare_model_to_observed <- function(model_params, observed_data = NULL, n_sims
   } else { # it's average t-a-p params, not hierarchical
 
     # expand to full t-a0a1-p0p1 format and compute probabilities
-    verify_params(model_params, expand = TRUE) |>
+    expand_params(model_params) |>
       list2env(envir = environment())
 
     prob1 <- a1 + (1-a1)*p1 # Pr[C = 1 | T = 1]

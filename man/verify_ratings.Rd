@@ -10,7 +10,7 @@ verify_ratings(ratings)
 \item{ratings}{A data frame with columns subject_id, rater_id, and rating}
 }
 \value{
-The original data frame if it's right, or an error message
+Zero if it's right, or an error message
 }
 \description{
 Verify ratings are in the correct format

@@ -82,7 +82,7 @@ verify_counts <- function(counts){
 
 #' Verify ratings are in the correct format
 #' @param ratings A data frame with columns subject_id, rater_id, and rating
-#' @return The original data frame if it's right, or an error message
+#' @return Zero if it's right, or an error message
 #' @export
 verify_ratings <- function(ratings){
   # make sure we have columns subject_id, rater_id, and rating
@@ -130,8 +130,7 @@ verify_rating_params <- function(rating_params){
 #' @param params A list with the t-a-p parameters
 #' @param expand If TRUE, the function will expand the parameters to the full
 #' list. This can be convenient for LL calculations to simplify the formula.
-#' @return The original params as a data frame if formatted correctly, or an
-#' error message.
+#' @return Zero if successful or an error message if not.
 #' @export
 verify_params <- function(params, expand = FALSE){
   # check that it's a list or named vector
@@ -147,13 +146,13 @@ verify_params <- function(params, expand = FALSE){
     stop("params must be list or named vector containing one of the following sets: (t, a, p); (t, a0, a1, p); (t, a, p0, p1); or (t, a0, a1, p0, p1)")
   }
 
-   # if it's a named vector, convert to data frame
+  # if it's a named vector, convert to data frame
   if(is.list(params)){
     df_params <- as.data.frame(t(unlist(params)))
   } else if(is.vector(params)){
     df_params <- as.data.frame(t(as.list(params)))
   } else {
-    stop("params must be a list or named vector")
+    stop("params must be a list, data frame, or named vector")
   }
 
   # all values must be between zero and one with no missing values
@@ -161,10 +160,29 @@ verify_params <- function(params, expand = FALSE){
     stop("All parameters must be between 0 and 1, with no missing values")
   }
 
- # expand if requested. This will convert a to a0,a1, and p to p0,p1 if
+  # standardize the format
+  return(0)
+}
+
+#' Expand t-a-p params to t-a0a1-p0p1
+#' @param params A list with the t-a-p parameters
+#' @return An expanded params list
+#' @export
+expand_params <- function(params){
+  verify_params(params)
+  # expand if requested. This will convert a to a0,a1, and p to p0,p1 if
   # neccessary
-  if(expand) {
-    if("a" %in% names(df_params)) {
+
+  # if it's a named vector, convert to data frame
+  if(is.list(params)){
+    df_params <- as.data.frame(t(unlist(params)))
+  } else if(is.vector(params)){
+    df_params <- as.data.frame(t(as.list(params)))
+  } else {
+    stop("params must be a list, data frame, or named vector")
+  }
+
+  if("a" %in% names(df_params)) {
       df_params$a0 <- df_params$a
       df_params$a1 <- df_params$a
       df_params$a  <- NULL
@@ -176,12 +194,9 @@ verify_params <- function(params, expand = FALSE){
     }
     df_params <- df_params |>
       select(t, a0, a1, p0, p1) # reorder the columns
-  }
 
-  # standardize the format
-  return(df_params)
+    return(df_params)
 }
-
 
 #' Count ratings
 #' @description The functions in this package require a special form for the

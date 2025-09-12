@@ -1,6 +1,7 @@
 #' get ratings by sampling a known distribution
 #' @param N_s number of subjects
-#' @param N_r number of raters per subject on average
+#' @param N_r number of raters per subject
+#' @param params A list with the t, a, p values, which must be between zero and one
 #' @param details logical defaulting to FALSE. If TRUE, return the full set
 #' of parameters to include the T_i, P_ij, and A_ij values.
 #' @return a data frame with ratings and parameters, including the input t-a-p averages, the
@@ -13,7 +14,7 @@ generate_sample_ratings <- function(N_s = 100, N_r = 5,
                                     details = FALSE) {
 
   # complete param list and put into environment
-  params <- verify_params(params, expand = TRUE)
+  params <- expand_params(params)
   list2env(params, envir = environment())
 
   subject_params <- tibble(subject_id = 1:N_s,
@@ -66,7 +67,7 @@ generate_exact_ratings <- function(N_s = 100, N_r = 5,
                                                  a = .7,
                                                  p = .5)) {
   # complete param list and put into environment
-  params <- verify_params(params, expand = TRUE)
+  params <- expand_params(params)
   list2env(params, envir = environment())
 
   # how many values are in the distro?

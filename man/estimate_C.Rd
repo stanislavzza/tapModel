@@ -4,13 +4,15 @@
 \alias{estimate_C}
 \title{Empirical confusion matrix for K-categories}
 \usage{
-estimate_C(rating_params_cat, K)
+estimate_C(rating_params_cat, K, normalize = TRUE)
 }
 \arguments{
 \item{rating_params_cat}{ratings with vector t added to
 subjects and a, vector p}
 
 \item{K}{the number of categories}
+
+\item{normalize}{if TRUE normalizes sum(C) = 1}
 }
 \value{
 The estimated C matrix

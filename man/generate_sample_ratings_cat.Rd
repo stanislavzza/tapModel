@@ -8,7 +8,7 @@ generate_sample_ratings_cat(
   N_s = 100,
   N_r = 5,
   K = 3,
-  params = list(t = rep(0.5, 3), a = 0.7, p = rep(0.5, 3)),
+  params = NULL,
   details = FALSE
 )
 }
@@ -20,7 +20,7 @@ generate_sample_ratings_cat(
 \item{K}{the number of categories, labeled 1 to K}
 
 \item{params}{A list with t, a, p. t and p are non-negative vectors of length K, which
-will be normalized to make probability distributions}
+will be normalized to make probability distributions. If NULL, uniform values are provided.}
 
 \item{details}{logical defaulting to FALSE. If TRUE, return the full set
 of parameters to include the T_i, P_ij, and A_ij values.}
@@ -30,7 +30,7 @@ A list that comprises the cat_ratings type: data frames ratings, subjects, and r
  an integer K > 1 with the number of categories, and a vector labels that
  give names to the categorizes. For the sample ratings, nominal
  values are provided for subject and rater parameters (.5 each) and
- the categories (Class 1, Class 2, etc)
+ the category labels (Class 1, Class 2, etc).
 }
 \description{
 get ratings by sampling a known distribution

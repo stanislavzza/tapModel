@@ -7,7 +7,7 @@
 e_m_step_cat(cat_ratings, group)
 }
 \arguments{
-\item{cat_ratings}{a cat_ratings object. See `generate_sample_ratings_cat()`}
+\item{cat_ratings}{A cat_ratings object}
 
 \item{group}{If TRUE, groups by rater_id to obtain hierarchical
 parameters. Otherwise returns average a, p}

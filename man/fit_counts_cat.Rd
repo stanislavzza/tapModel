@@ -4,7 +4,7 @@
 \alias{fit_counts_cat}
 \title{Fit categorical t-a-p model (average parameters only)}
 \usage{
-fit_counts_cat(cat_ratings, max_iter = 30, tol = 1e-04)
+fit_counts_cat(cat_ratings, max_iter = 20, tol = 1e-04)
 }
 \arguments{
 \item{cat_ratings}{A cat_ratings object (see generate_sample_ratings_cat()).}

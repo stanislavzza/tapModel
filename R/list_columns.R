@@ -170,3 +170,28 @@ lc_pull <- function(lc, idx = 1) {
   purrr::map_dbl(lc, ~ .x[idx])
 }
 
+#' lc_clone: Clone selected element across each vector
+#'
+#' For each vector in a list-column, extract the value at the position
+#' given by `idx` (which can vary by row), and replicate it across all
+#' positions of that vector.
+#'
+#' @param lc A list of numeric vectors (all same length).
+#' @param idx An integer vector of indices (1-based), same length as `lc`.
+#'
+#' @return A list-column where each vector has been replaced by
+#'   a constant vector equal to the selected element.
+#'
+#' @examples
+#' lc <- list(c(0.1, 0.2, 0.3, 0.4),
+#'            c(5, 6, 7, 8))
+#' idx <- c(3, 2)
+#' lc_clone(lc, idx)
+#' # [[1]] 0.3 0.3 0.3 0.3
+#' # [[2]] 6.0 6.0 6.0 6.0
+#' @export
+lc_clone <- function(lc, idx) {
+  purrr::map2(lc, idx, ~ rep(.x[.y], length(.x)))
+}
+
+

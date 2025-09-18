@@ -28,9 +28,10 @@ of parameters to include the T_i, P_ij, and A_ij values.}
 \value{
 A list that comprises the cat_ratings type: data frames ratings, subjects, and raters,
  an integer K > 1 with the number of categories, and a vector labels that
- give names to the categorizes. For the sample ratings, nominal
- values are provided for subject and rater parameters (.5 each) and
- the category labels (Class 1, Class 2, etc).
+ give names to the categorizes. For the sample ratings,
+ values are provided for subject and rater parameters that match the
+ generation process and nominal category labels (Class 1, Class 2, etc) are
+ created.
 }
 \description{
 get ratings by sampling a known distribution

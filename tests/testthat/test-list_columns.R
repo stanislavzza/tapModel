@@ -77,3 +77,13 @@ test_that("lc_pull extracts elements correctly", {
   expect_equal(lc_pull(lc, 1), c(0.7, 0.4))
   expect_equal(lc_pull(lc, 2), c(0.3, 0.6))
 })
+
+test_that("lc_clone replicates selected element across vectors", {
+  lc <- list(c(0.1, 0.2, 0.3, 0.4),
+             c(5, 6, 7, 8))
+  idx <- c(3, 2)
+  out <- lc_clone(lc, idx)
+  expect_equal(out[[1]], rep(0.3, 4))
+  expect_equal(out[[2]], rep(6, 4))
+})
+

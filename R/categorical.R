@@ -8,9 +8,10 @@
 #' of parameters to include the T_i, P_ij, and A_ij values.
 #' @return A list that comprises the cat_ratings type: data frames ratings, subjects, and raters,
 #'  an integer K > 1 with the number of categories, and a vector labels that
-#'  give names to the categorizes. For the sample ratings, nominal
-#'  values are provided for subject and rater parameters (.5 each) and
-#'  the category labels (Class 1, Class 2, etc).
+#'  give names to the categorizes. For the sample ratings,
+#'  values are provided for subject and rater parameters that match the
+#'  generation process and nominal category labels (Class 1, Class 2, etc) are
+#'  created.
 #' @export
 generate_sample_ratings_cat <- function(N_s = 100, N_r = 5,
                                         K = 3,
@@ -21,21 +22,19 @@ generate_sample_ratings_cat <- function(N_s = 100, N_r = 5,
 
   if(is.null(params)){
     params <- list(t = rep(.5,K),
-         a = .7,
-         p = rep(.5,K))
+                   a = .7,
+                   p = rep(.5,K))
   }
 
-  # complete param list and put into environment
-  list2env(params, envir = environment())
-  t <- t/sum(t)
-  p <- p/sum(p)
+  params$t <- params$t/sum(params$t)
+  params$p <- params$p/sum(params$p)
 
 
   subject_params <- tibble(subject_id = 1:N_s,
                            T_i = sample(1:K,
                                         N_s,
                                         replace = TRUE,
-                                        prob = t))
+                                        prob = params$t ))
 
 
   rater_params <- tibble(rater_id = 1:N_r)
@@ -47,8 +46,8 @@ generate_sample_ratings_cat <- function(N_s = 100, N_r = 5,
 
   # generate ratings based on t_i-a_j-p_i model
   param_grid <- param_grid %>%
-    mutate(A_ij = as.integer(runif(n_ratings) < a),
-           P_ij = sample(1:K, n_ratings, replace = TRUE, prob = p),
+    mutate(A_ij = as.integer(runif(n_ratings) < params$a ),
+           P_ij = sample(1:K, n_ratings, replace = TRUE, prob = params$p ),
            C_ij = if_else(A_ij == 1,T_i,P_ij))
 
   if(details) {
@@ -59,14 +58,18 @@ generate_sample_ratings_cat <- function(N_s = 100, N_r = 5,
       select(subject_id, rating = C_ij, rater_id)
   }
 
-  subjects <- param_grid |>
-    distinct(subject_id) |>
-    mutate(t = list(rep(1/K,K))) # nominal value
+  subjects <- subject_params |>
+    mutate(t = list(params$t))
+
+  if(details != TRUE) {
+    subjects <- subjects |>
+      select(-T_i)
+  }
 
   raters <- param_grid |>
     distinct(rater_id) |>
-    mutate(a = .5,
-           p = list(rep(1/K,K))) # nominal value
+    mutate(a = params$a,
+           p = list(params$p)) # nominal value
 
   return(list(K = K,
               labels = paste("Class",1:K),
@@ -242,15 +245,16 @@ avg_params_cat <- function(cat_ratings){
 #' information in cat_ratings into one data frame. The number of labels
 #' must match the number of unique values of rating and will be matched
 #' in ascending order of the ratings.
+#' @export
 as_rating_params_cat <- function(cat_ratings){
 
-  codes <- data.frame(rating = sort(unique(cat_ratings$ratings$rating)),
-                      label = cat_ratings$labels)
-
-  cat_ratings$ratings |>
-    left_join(codes) |>
+  df <- cat_ratings$ratings |>
     left_join(cat_ratings$subjects, by = "subject_id") |>
     left_join(cat_ratings$raters, by = "rater_id")
+
+  df$label <- cat_ratings$labels[df$rating]
+
+  return(df)
 }
 
 #' Fit categorical t-a-p model (average parameters only)
@@ -382,9 +386,9 @@ as_cat_ratings <- function(ratings, labels = NULL, K = NULL){
 
 }
 
-#' kits_per_rating_cat: Average entropy per rating (base 1/K)
+#' krits_per_rating_cat: Average entropy per rating (base 1/K)
 #'
-#' Computes the average normalized entropy ("kits") per rating for a
+#' Computes the average normalized entropy ("krit" = k-ary digit) per rating for a
 #' categorical ratings object, using a base of log(1/K). This generalizes
 #' bits-per-rating from the binary case to the K-category case.
 #'
@@ -397,7 +401,7 @@ as_cat_ratings <- function(ratings, labels = NULL, K = NULL){
 #' @seealso \code{\link{bits_per_rating}}
 #' @export
 
-kits_per_rating_cat <- function(cat_ratings){
+krits_per_rating_cat <- function(cat_ratings){
 
   # assemble rating params
   rating_params_cat <- as_rating_params_cat(cat_ratings)
@@ -408,21 +412,19 @@ kits_per_rating_cat <- function(cat_ratings){
   ll <- rating_params_cat |>
     mutate(
 
-      a_bar_p = lc_subtract(lc_one(N, K), a) |>
-        lc_mpy(p),  # (1-a)p
+      a_bar = lc_subtract(lc_one(N, K), a),
+      a_bar_p = lc_clone(p, rating) |> lc_mpy(a_bar),
 
       ll = lc_indicator(rating, K) |>
         lc_mpy(a) |>
         lc_add(a_bar_p) |>
-        lc_fn(log), # log(a + (1-a)p) in the rating position, else log((1-a)p)
-
-      lt = lc_fn(t, log) #log(t)
+        lc_fn(log) # log(a + (1-a)p) in the rating position, else log((1-a)p)
     ) |>
     group_by(subject_id) |>
     summarize(
-      lt       = list(first(lt)),
-      ll_sum_j = list(lc_vsum(ll)) |> lc_add(lt),
-      ll_sum_i = lc_logsumexp(ll_sum_j)
+      lt       = list(first(t)) |> lc_fn(log), # log(t)
+      ll_sum_k = list(lc_vsum(ll)) |> lc_add(lt), # scaled sum over each t_k
+      ll_sum_i = lc_logsumexp(ll_sum_k) # completes inner sum-product in log form
     ) |>
     summarize(total = sum(ll_sum_i)) |>
     pull(total)
@@ -495,7 +497,7 @@ fleiss_kappa_cat <- function(cat_ratings) {
   cat_ratings$p <- p_vec
 
   # log likelihood via ratings-level function
-  ll <- kits_per_rating_cat(cat_ratings)
+  ll <- krits_per_rating_cat(cat_ratings)
   degenerate <- is_degenerate(c(p_vec, sqrt(kappa), p_vec)) || kappa <= 0
 
   tibble::tibble(
@@ -508,4 +510,48 @@ fleiss_kappa_cat <- function(cat_ratings) {
 
 }
 
+
+#' expected_krits_per_rating_cat: Average entropy per rating (base 1/K) from the model.
+#'
+#' @param params A list with t, a, and p
+#' @param uniform_t If TRUE, t is set to a uniform distribution to eliminate
+#' the effect of sampling from true classes
+#' @return A numeric scalar: average entropy per rating in the range [0, 1].
+#' @seealso \code{\link{bits_per_rating}}
+#' @export
+
+expected_krits_per_rating_cat <- function(params, uniform_t = FALSE){
+
+  K <- length(params$t)
+
+  xlogx <- function(x){
+    if_else(x == 0, 0, -x*log(x)/log(K))
+  }
+
+  if(uniform_t == TRUE){
+    t <- rep(1/K, K)
+  } else {
+    t <- params$t/sum(params$t)
+  }
+
+  a <- params$a
+  a_ <- 1 - a
+  p <- params$p/sum(params$p)
+
+  ll_sum <- 0
+
+  for(k in 1:K){
+    for(j in 1:K) {
+      if(k == j){
+        ll <- xlogx(a + a_*p[j])
+      } else {
+        ll <- xlogx(a_*p[j])
+      }
+      ll_sum <- ll_sum + t[k]*ll
+    }
+  }
+
+  return(ll_sum)
+
+}
 

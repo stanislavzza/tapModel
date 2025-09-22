@@ -302,6 +302,7 @@ find_solution_em <- function(counts, max_steps = 100, tolerance = 1e-4) {
   old_t <- .5
   old_a <- .5
   old_p <- .5
+  old_ll <- 1
 
   for(i in 1:max_steps) {
     e_step <- estimate_tu(counts, params = list(t = old_t, a = old_a, p = old_p))
@@ -322,6 +323,17 @@ find_solution_em <- function(counts, max_steps = 100, tolerance = 1e-4) {
     # m_step
     a <- confusion$TP/t - confusion$FP/(1-t)
     p <- confusion$FP/(1-t)/(1-a) # solve for p
+    ll <- ap_log_likelihood(params = c(a, p), confusion)
+
+    # if likelihood got worse, return the previous result
+    if(ll > old_ll){
+      t <- old_t
+      a <- old_a
+      p <- old_p
+      ll <- old_ll
+      warning(sprintf("Bits per rating increased from %.4f to %.4f; stopping.", old_ll, ll))
+      break
+    }
 
     # check for convergence
     if(abs(t - old_t) < tolerance &&
@@ -330,12 +342,13 @@ find_solution_em <- function(counts, max_steps = 100, tolerance = 1e-4) {
       break
     }
 
-    old_t <- t
-    old_a <- a
-    old_p <- p
+    old_t  <- t
+    old_a  <- a
+    old_p  <- p
+    old_ll <- ll
   }
 
-  ll <- ap_log_likelihood(params = c(a, p), confusion)
+
   degenerate <- (a == 0 | a == 1 | p == 0 | p == 1 | t == 0 | t == 1)
 
   return(data.frame(t = t, a = a, p = p, ll = ll, degenerate = degenerate))

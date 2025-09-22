@@ -423,10 +423,10 @@ fit_ratings <- function(ratings, params = NULL,
 
   for (i in seq_len(max_iterations)) {
     # E-step and M-step
-    rating_params <- estimate_ti(rating_params)
-    rating_params <- estimate_aj_pj(rating_params)
+    rating_params2 <- estimate_ti(rating_params)
+    rating_params2 <- estimate_aj_pj(rating_params2)
 
-    ll_new <- bits_per_rating(rating_params)
+    ll_new <- bits_per_rating(rating_params2)
 
     if (!is.finite(ll_new) || is.na(ll_new)) {
       warning("Non-finite or missing log-likelihood encountered. Stopping.")
@@ -437,6 +437,8 @@ fit_ratings <- function(ratings, params = NULL,
       warning(sprintf("Bits per rating increased from %.4f to %.4f; stopping.", ll_old, ll_new))
       break
     }
+
+    rating_params <- rating_params2
 
     if (verbose) {
       message(sprintf("Iter %d: LL = %.4f", i, ll_new))

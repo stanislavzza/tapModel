@@ -69,7 +69,7 @@ generate_sample_ratings_cat <- function(N_s = 100, N_r = 5,
   raters <- param_grid |>
     distinct(rater_id) |>
     mutate(a = params$a,
-           p = list(params$p)) # nominal value
+           p = list(params$p))
 
   return(list(K = K,
               labels = paste("Class",1:K),
@@ -88,25 +88,26 @@ generate_sample_ratings_cat <- function(N_s = 100, N_r = 5,
 #' @export
 estimate_ti_cat <- function(cat_ratings){
 
-  eps <- 1e-7
-
-  # probabilities of random assignments for inaccurate ratings
-  rater_pi <- cat_ratings$raters |>
-    mutate(pi = map2(p, a, ~ (1 - .y) * .x)) |>
-    select(rater_id, a, pi)
+  K <- cat_ratings$K
 
   # attach to ratings, adjusting for the assigned class
   # this generates a lot of warnings
   rating_log_pi <- cat_ratings$ratings |>
-    left_join(rater_pi, by = "rater_id") |>
+    left_join(cat_ratings$raters, by = "rater_id") |>
+
     # add rater's a to pi in the position of pi
     # that matches the rating = accurate ratings
     mutate(
-      logpi = map2(pi, rating, ~ {
-        .x[.y] <- .x[.y] + a  # add accuracy to the position matching the rating
-        log(.x + eps) # log pr(T_i = k | rating_ij)
-      })
-    )
+      a_bar = lc_subtract(lc_one(n(), K), a),
+      a_bar_p = lc_clone(p, rating) |> lc_mpy(a_bar),
+
+      logpi = lc_indicator(rating, K) |>
+        lc_mpy(a) |>
+        lc_add(a_bar_p) |>
+        lc_fn(log) # log(a + (1-a)p) in the rating position, else log((1-a)p)
+
+    ) |>
+    select(subject_id, logpi)
 
   subject_log_probs <- rating_log_pi |>
     group_by(subject_id) |>
@@ -118,6 +119,7 @@ estimate_ti_cat <- function(cat_ratings){
         p_unnorm <- exp(.x - max(.x))  # stability trick
         p_unnorm / sum(p_unnorm)
       })
+     # t = lc_logsumexp(t)
     ) |>
     select(subject_id, t)
 
@@ -135,6 +137,7 @@ estimate_ti_cat <- function(cat_ratings){
 #' This function is designed to be used inside data
 #' grouped by rater if desired.
 #' @return The estimated C matrix
+#' @export
 estimate_C <- function(rating_params_cat, K, normalize = TRUE) {
 
   M <- matrix(0, nrow = K, ncol = K)
@@ -260,80 +263,51 @@ as_rating_params_cat <- function(cat_ratings){
 #' Fit categorical t-a-p model (average parameters only)
 #' @param cat_ratings A cat_ratings object (see generate_sample_ratings_cat()).
 #' @param max_iter Maximum number of EM iterations (default 30).
-#' @param tol Convergence tolerance on log-likelihood (default 1e-6).
 #' @return A tibble with average accuracy a and guess distribution p.
 #' @export
-fit_counts_cat <- function(cat_ratings, max_iter = 20, tol = 1e-4) {
+fit_counts_cat <- function(cat_ratings, max_iter = 20) {
 
-  # helper functions
-  delta_param <- function(params1, params2){
-
-    delta <- ( sum(abs(params1$t - params2$t)) +
-                 sum(abs(params1$p - params2$p)) +
-                 abs(params1$a - params2$a) ) / 7 # number of params
-
-    return(delta)
-  }
-
-
-  delta1 <- 1
-  params1 <- avg_params_cat(cat_ratings)
-
+  kpr_1 <- krits_per_rating_cat(cat_ratings)
+  params <- avg_params_cat(cat_ratings)
 
   for (iter in seq_len(max_iter)) {
     cat_ratings <- e_m_step_cat(cat_ratings, group = FALSE)
 
-    params2 <- avg_params_cat(cat_ratings)
-    delta2 <- delta_param(params1, params2)
+    kpr_2 <- krits_per_rating_cat(cat_ratings)
 
-    if(delta2 < tol) break
-    if(delta2 > delta1) return(params1)
+    if(kpr_2 > kpr_1) {
+      warning(sprintf("Krits per rating increased from %.4f to %.4f; stopping.", kpr_1, kpr_2))
+      break
+    }
+    kpr_1 <- kpr_2
 
-    params1 <- params2
-    delta1 <- delta2
-
+    params <- avg_params_cat(cat_ratings)
   }
 
-  return(params2) # averaged parameters
+  return(params) # averaged parameters
 }
 
 #' Fit categorical t-a-p model (full hierarchical EM)
 #' @param cat_ratings A cat_ratings object (see generate_sample_ratings_cat()).
 #' @param max_iter Maximum number of EM iterations (default 50).
-#' @param tol Convergence tolerance on log-likelihood (default 1e-6).
 #' @return Updated cat_ratings object with fitted subject and rater parameters.
 #' @export
-fit_ratings_cat <- function(cat_ratings, max_iter = 20, tol = 1e-4) {
+fit_ratings_cat <- function(cat_ratings, max_iter = 20) {
 
-  # helper functions
-  delta_param <- function(params1, params2){
-
-    delta <- ( sum(abs(params1$t - params2$t)) +
-                 sum(abs(params1$p - params2$p)) +
-                 abs(params1$a - params2$a) ) / 7 # number of params
-
-    return(delta)
-  }
-
-
-  delta1 <- 1
-  params1 <- avg_params_cat(cat_ratings)
-
-  cat_ratings_old <- cat_ratings
+  kpr_1 <- krits_per_rating_cat(cat_ratings)
 
   for (iter in seq_len(max_iter)) {
-    cat_ratings <- e_m_step_cat(cat_ratings, group = TRUE)
+    cat_ratings_new <- e_m_step_cat(cat_ratings, group = TRUE)
 
-    params2 <- avg_params_cat(cat_ratings)
-    delta2 <- delta_param(params1, params2)
+    kpr_2 <- krits_per_rating_cat(cat_ratings_new)
 
-    if(delta2 < tol) break
-    if(delta2 > delta1) return(cat_ratings_old)
+    if(kpr_2 > kpr_1) {
+      warning(sprintf("Krits per rating increased from %.4f to %.4f; stopping.", kpr_1, kpr_2))
+      break
+    }
 
-    params1 <- params2
-    delta1 <- delta2
-    cat_ratings_old <- cat_ratings
-
+    cat_ratings <- cat_ratings_new
+    kpr_1 <- kpr_2
   }
 
   return(cat_ratings)
@@ -486,23 +460,13 @@ fleiss_kappa_cat <- function(cat_ratings) {
   kappa <- (P_bar - P_e_bar) / (1 - P_e_bar)
   kappa <- ifelse(kappa < 0 | is.na(kappa) | is.nan(kappa), 0, kappa)
 
-  # update params
-  cat_ratings$subjects <- cat_ratings$subjects |>
-    dplyr::mutate(t = list(p_vec))
-  cat_ratings$raters <- cat_ratings$raters |>
-    dplyr::mutate(a = sqrt(kappa), p = list(p_vec))
-
-  cat_ratings$t <- p_vec
-  cat_ratings$a <- sqrt(kappa)
-  cat_ratings$p <- p_vec
-
   # log likelihood via ratings-level function
   ll <- krits_per_rating_cat(cat_ratings)
   degenerate <- is_degenerate(c(p_vec, sqrt(kappa), p_vec)) || kappa <= 0
 
   tibble::tibble(
     t = list(p_vec),
-    a = a,
+    a = sqrt(kappa),
     p = list(p_vec),
     ll = ll,
     degenerate = degenerate

@@ -4,14 +4,12 @@
 \alias{fit_ratings_cat}
 \title{Fit categorical t-a-p model (full hierarchical EM)}
 \usage{
-fit_ratings_cat(cat_ratings, max_iter = 20, tol = 1e-04)
+fit_ratings_cat(cat_ratings, max_iter = 20)
 }
 \arguments{
 \item{cat_ratings}{A cat_ratings object (see generate_sample_ratings_cat()).}
 
 \item{max_iter}{Maximum number of EM iterations (default 50).}
-
-\item{tol}{Convergence tolerance on log-likelihood (default 1e-6).}
 }
 \value{
 Updated cat_ratings object with fitted subject and rater parameters.

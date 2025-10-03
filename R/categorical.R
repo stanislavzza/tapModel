@@ -90,6 +90,10 @@ estimate_ti_cat <- function(cat_ratings){
 
   K <- cat_ratings$K
 
+  # as a prior for t use the averages over all subjects
+  lt <- cat_ratings$subjects |> # log t
+    summarize(lt = list(lc_vsum(t)) |> lc_mpy(1/n()) |> lc_fn(log))
+
   # attach to ratings, adjusting for the assigned class
   # this generates a lot of warnings
   rating_log_pi <- cat_ratings$ratings |>
@@ -111,15 +115,16 @@ estimate_ti_cat <- function(cat_ratings){
 
   subject_log_probs <- rating_log_pi |>
     group_by(subject_id) |>
-    summarize(logprob = list(lc_vsum(logpi)))
+    summarize(logprob = list(lc_vsum(logpi))) |>
+    mutate(logprob = logprob |> lc_add(lt$lt))
 
   subject_probs <- subject_log_probs |>
-    mutate(
+    mutate( # log-sum-exp
       t = map(logprob, ~ {
         p_unnorm <- exp(.x - max(.x))  # stability trick
         p_unnorm / sum(p_unnorm)
       })
-     # t = lc_logsumexp(t)
+     # t = lc_logsumexp(t) # need to fix this
     ) |>
     select(subject_id, t)
 
@@ -205,8 +210,7 @@ e_m_step_cat <- function(cat_ratings, group) {
   cat_ratings <- estimate_ti_cat(cat_ratings)
 
   # M step: join in the updated t vectors for each rating
-  rating_params_cat <- cat_ratings$ratings |>
-    left_join(cat_ratings$subjects, by = "subject_id")
+  rating_params_cat <- cat_ratings |> as_rating_params_cat()
 
   if (group) {
     # Per-rater M-step estimation
@@ -221,7 +225,7 @@ e_m_step_cat <- function(cat_ratings, group) {
   }
 
   # normalize p
-  cat_ratings$raters$p <- lc_prob(cat_ratings$raters$p)
+  #cat_ratings$raters$p <- lc_prob(cat_ratings$raters$p)
 
   return(cat_ratings)
 }
@@ -275,8 +279,9 @@ fit_counts_cat <- function(cat_ratings, max_iter = 20) {
 
     kpr_2 <- krits_per_rating_cat(cat_ratings)
 
-    if(kpr_2 > kpr_1) {
-      warning(sprintf("Krits per rating increased from %.4f to %.4f; stopping.", kpr_1, kpr_2))
+    if(kpr_2 > kpr_1 + .05) {
+      warning(str_c("Krits per rating increased from %.4f to %.4f
+                    on iteration, ", iter, "; stopping.", kpr_1, kpr_2))
       break
     }
     kpr_1 <- kpr_2
@@ -301,7 +306,7 @@ fit_ratings_cat <- function(cat_ratings, max_iter = 20) {
 
     kpr_2 <- krits_per_rating_cat(cat_ratings_new)
 
-    if(kpr_2 > kpr_1) {
+    if(kpr_2 > kpr_1 + .05) {
       warning(sprintf("Krits per rating increased from %.4f to %.4f; stopping.", kpr_1, kpr_2))
       break
     }
@@ -381,6 +386,7 @@ krits_per_rating_cat <- function(cat_ratings){
   rating_params_cat <- as_rating_params_cat(cat_ratings)
   K <- cat_ratings$K
   N <- nrow(rating_params_cat)
+
 
   # compute the ll for each rating
   ll <- rating_params_cat |>

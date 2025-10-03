@@ -158,30 +158,33 @@ estimate_tu <- function(counts, params){
 #' @export
 estimate_ti <- function(rating_params){
 
-    eps <- 1e-5
+  eps <- 1e-10
+  log_avg_t <- log(mean(rating_params$t))
+  log_avg_t_ <- log(1-mean(rating_params$t))
 
-    # create subject log likelihood sums
-    subject_prob <- rating_params |>
-      # create the pi statistics. See the hierarchical chapter for details.
-      # this follows Dawid & Skene (1979) notation.
-      mutate(lpi_00 = log(1 - (1-a)*p + eps),
-             lpi_01 = log((1-a)*p+ eps),
-             lpi_10 = log((1-a)*(1-p)+ eps),
-             lpi_11 = log(a + (1-a)*p)+ eps) |>
-      # now do the subject aggregation
-      group_by(subject_id) |>
-      summarize(#t = first(t), # same value t_i for single subject
-                C0 = exp(sum( (rating == 0)*lpi_00 + (rating == 1)*lpi_01)),
-                C1 = exp(sum( (rating == 0)*lpi_10 + (rating == 1)*lpi_11))) |>
-      mutate(t = C1/(C0 + C1)) |>
-      select(subject_id, t)
 
-    rating_params <- rating_params |>
-      select(-t) |>
-      left_join(subject_prob, by = "subject_id") |>
-      select(subject_id, rating, rater_id, t, a, p)
+  # create subject log likelihood sums
+  subject_prob <- rating_params |>
+    # create the pi statistics. See the hierarchical chapter for details.
+    # this follows Dawid & Skene (1979) notation.
+    mutate(lpi_00 = log(1 - (1-a)*p + eps),
+           lpi_01 = log((1-a)*p+ eps),
+           lpi_10 = log((1-a)*(1-p)+ eps),
+           lpi_11 = log(a + (1-a)*p)+ eps) |>
+    # now do the subject aggregation
+    group_by(subject_id) |>
+    summarize(#t = first(t), # same value t_i for single subject
+      C0 = exp(log_avg_t_ + sum( (rating == 0)*lpi_00 + (rating == 1)*lpi_01)),
+      C1 = exp(log_avg_t + sum( (rating == 0)*lpi_10 + (rating == 1)*lpi_11))) |>
+    mutate(t = C1/(C0 + C1)) |>
+    select(subject_id, t)
 
-    return(rating_params)
+  rating_params <- rating_params |>
+    select(-t) |>
+    left_join(subject_prob, by = "subject_id") |>
+    select(subject_id, rating, rater_id, t, a, p)
+
+  return(rating_params)
 }
 
 #' generate rater parameters

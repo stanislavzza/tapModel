@@ -4,12 +4,14 @@
 \alias{fit_counts_cat}
 \title{Fit categorical t-a-p model (average parameters only)}
 \usage{
-fit_counts_cat(cat_ratings, max_iter = 20)
+fit_counts_cat(cat_ratings, max_iter = 20, tolerance = 0.01)
 }
 \arguments{
 \item{cat_ratings}{A cat_ratings object (see generate_sample_ratings_cat()).}
 
 \item{max_iter}{Maximum number of EM iterations (default 30).}
+
+\item{tolerance}{Average convergence criterion. See `check_convergence_cat()`}
 }
 \value{
 A tibble with average accuracy a and guess distribution p.

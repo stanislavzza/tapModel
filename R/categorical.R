@@ -245,6 +245,20 @@ avg_params_cat <- function(cat_ratings){
   return(list( t = t, a = a, p = p))
 }
 
+#' Compare two average parameter sets for abs difference
+#' @param p1 Parameter set (t, a, p) with t and p k-vectors
+#' @param p2 A second parameter set
+#' @param tolerance What absolute difference to require?
+#' @export
+check_convergence_cat <- function(p1, p2, tolerance){
+  t_okay <- if_else(mean(abs(p1$t - p2$t)) <= tolerance, 1, 0)
+  a_okay <- if_else(abs(p1$a - p2$a) <= tolerance, 1, 0)
+  p_okay <- if_else(mean(abs(p1$p - p2$p)) <= tolerance, 1, 0)
+
+  if(t_okay & a_okay & p_okay) return(TRUE)
+  return(FALSE)
+}
+
 #' cat_ratings to rating_params
 #' @param cat_ratings A cat_ratings object after parameter estimation
 #' @return a data frame with ratings, ids, and parameters
@@ -267,54 +281,47 @@ as_rating_params_cat <- function(cat_ratings){
 #' Fit categorical t-a-p model (average parameters only)
 #' @param cat_ratings A cat_ratings object (see generate_sample_ratings_cat()).
 #' @param max_iter Maximum number of EM iterations (default 30).
+#' @param tolerance Average convergence criterion. See `check_convergence_cat()`
 #' @return A tibble with average accuracy a and guess distribution p.
 #' @export
-fit_counts_cat <- function(cat_ratings, max_iter = 20) {
+fit_counts_cat <- function(cat_ratings, max_iter = 20, tolerance = .01) {
 
-  kpr_1 <- krits_per_rating_cat(cat_ratings)
-  params <- avg_params_cat(cat_ratings)
+  # get the average parameter values
+  p1 <- cat_ratings |> avg_params_cat()
 
   for (iter in seq_len(max_iter)) {
-    cat_ratings <- e_m_step_cat(cat_ratings, group = FALSE)
+    cat_ratings<- e_m_step_cat(cat_ratings, group = FALSE)
+    p2 <- cat_ratings |> avg_params_cat()
 
-    kpr_2 <- krits_per_rating_cat(cat_ratings)
-
-    if(kpr_2 > kpr_1 + .05) {
-      warning(str_c("Krits per rating increased from %.4f to %.4f
-                    on iteration, ", iter, "; stopping.", kpr_1, kpr_2))
-      break
+    if(check_convergence_cat(p1, p2, tolerance)) {
+      return(p2)
     }
-    kpr_1 <- kpr_2
-
-    params <- avg_params_cat(cat_ratings)
+    p1 <- p2
   }
 
-  return(params) # averaged parameters
+  return(p2) # averaged parameters
 }
 
 #' Fit categorical t-a-p model (full hierarchical EM)
 #' @param cat_ratings A cat_ratings object (see generate_sample_ratings_cat()).
 #' @param max_iter Maximum number of EM iterations (default 50).
+#' @param tolerance Average convergence criterion. See `check_convergence_cat()`
 #' @return Updated cat_ratings object with fitted subject and rater parameters.
 #' @export
-fit_ratings_cat <- function(cat_ratings, max_iter = 20) {
+fit_ratings_cat <- function(cat_ratings, max_iter = 20, tolerance = .01) {
 
-  kpr_1 <- krits_per_rating_cat(cat_ratings)
+  # get the average parameter values
+  p1 <- cat_ratings |> avg_params_cat()
 
   for (iter in seq_len(max_iter)) {
-    cat_ratings_new <- e_m_step_cat(cat_ratings, group = TRUE)
+    cat_ratings<- e_m_step_cat(cat_ratings, group = TRUE)
+    p2 <- cat_ratings |> avg_params_cat()
 
-    kpr_2 <- krits_per_rating_cat(cat_ratings_new)
-
-    if(kpr_2 > kpr_1 + .05) {
-      warning(sprintf("Krits per rating increased from %.4f to %.4f; stopping.", kpr_1, kpr_2))
-      break
+    if(check_convergence_cat(p1, p2, tolerance)) {
+      return(cat_ratings)
     }
-
-    cat_ratings <- cat_ratings_new
-    kpr_1 <- kpr_2
+    p1 <- p2
   }
-
   return(cat_ratings)
 }
 

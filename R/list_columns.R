@@ -194,4 +194,87 @@ lc_clone <- function(lc, idx) {
   purrr::map2(lc, idx, ~ rep(.x[.y], length(.x)))
 }
 
+#' pivot_wider_lc: Expand a list-column into K scalar columns
+#'
+#' Replaces the list-column `col_name` with K numeric columns named
+#' `col_name_1`, ..., `col_name_K`, where each new column contains the element
+#' at that index from the original vectors.
+#'
+#' @param df A data frame containing a list-column.
+#' @param col_name A single character string naming the list-column to widen.
+#'
+#' @return A data frame with `col_name` removed and K widened numeric columns added.
+#' @examples
+#' df <- tibble::tibble(id = 1:2, p = list(c(1,2,3), c(4,5,6)))
+#' pivot_wider_lc(df, "p")
+#' @export
+pivot_wider_lc <- function(df, col_name) {
+  stopifnot(is.character(col_name), length(col_name) == 1)
+  if (!col_name %in% names(df)) stop("Column '", col_name, "' not found.")
+
+  lc <- df[[col_name]]
+  if (!is.list(lc)) stop("Column '", col_name, "' must be a list-column.")
+
+  # Handle zero-row data frames gracefully
+  if (nrow(df) == 0) {
+    return(df[, setdiff(names(df), col_name), drop = FALSE])
+  }
+
+  # Verify equal lengths and build matrix
+  lens <- vapply(lc, length, integer(1))
+  if (any(lens != lens[1])) stop("All vectors in '", col_name, "' must have equal length.")
+  K <- lens[1]
+  if (K == 0) stop("Vectors in '", col_name, "' must have positive length.")
+
+  mat <- do.call(rbind, lc)  # N x K
+  new_names <- paste0(col_name, "_", seq_len(K))
+  widened <- tibble::as_tibble(mat, .name_repair = ~ new_names)
+
+  dplyr::bind_cols(
+    df[, setdiff(names(df), col_name), drop = FALSE],
+    widened
+  )
+}
+
+#' pivot_longer_lc: Wide-then-long for a list-column
+#'
+#' First widens the list-column `col_name` into K scalar columns (as in
+#' \code{pivot_wider_lc}), then gathers them into \code{k} (index, integer)
+#' and \code{<col_name>_k} (value) columns.
+#'
+#' @param df A data frame containing a list-column.
+#' @param col_name A single character string naming the list-column to pivot.
+#'
+#' @return A data frame where the original list-column is replaced by
+#'   two columns: \code{k} (1..K) and \code{<col_name>_k} with the values.
+#' @examples
+#' df <- tibble::tibble(id = 1:2, p = list(c(1,2,3), c(4,5,6)))
+#' pivot_longer_lc(df, "p")
+#' @export
+pivot_longer_lc <- function(df, col_name) {
+  widened <- pivot_wider_lc(df, col_name)
+
+  # Collect widened column names
+  prefix <- paste0(col_name, "_")
+  cols <- grep(paste0("^", prefix, "\\d+$"), names(widened), value = TRUE)
+
+  if (length(cols) == 0) {
+    # zero-row case: just return df without the original list-column
+    out <- df[, setdiff(names(df), col_name), drop = FALSE]
+    out$k <- integer(0)
+    out[[paste0(col_name, "_k")]] <- numeric(0)
+    return(out)
+  }
+
+  long <- tidyr::pivot_longer(
+    widened,
+    dplyr::all_of(cols),
+    names_to = "k",
+    values_to = paste0(col_name, "_k")
+  )
+
+  # Parse index and coerce to integer
+  long$k <- as.integer(sub("^.*_", "", long$k))
+  long
+}
 

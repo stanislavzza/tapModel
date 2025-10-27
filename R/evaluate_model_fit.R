@@ -244,15 +244,15 @@ rating_calibration <- function(rating_params, bins = 10){
   # Merge observed and simulated frequencies
   my_plot <- comparison |>
     select(observed, modeled) |>
-    ggplot(aes(y = modeled, x = observed)) +
+    ggplot(aes(x = modeled, y = observed)) +
     geom_line(color = "steelblue", linewidth = 0) +
     geom_point(size = 1.5, color = "steelblue") +
     geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
     theme_bw() +
     labs(title = my_title,
          subtitle = my_subtitle,
-         y = "Modeled Fraction of Class 1",
-         x = "Observed Fraction of Class 1")
+         x = "Modeled Fraction of Class 1",
+         y = "Observed Fraction of Class 1")
 
   return(my_plot)
 

@@ -78,6 +78,53 @@ generate_sample_ratings_cat <- function(N_s = 100, N_r = 5,
               raters = raters))
 }
 
+#' Generate ratings from a cat_ratings object
+#' @param cat_ratings a cat_ratings object with subjects, raters, and ratings data frames
+#' @param use_avg_t If TRUE, sets each subject's t vector to the average (default)
+#' @return A cat_ratings object with ratings generated from the t, a, p parameters
+#' @details If use_avg_t is TRUE, then the t vector for each subject is set to the
+#' average t vector over all subjects.
+#' @export
+generate_ti_aj_pj_ratings_cat <- function(cat_ratings, use_avg_t = TRUE){
+
+  n_subjects <- nrow(cat_ratings$subjects)
+  n_ratings  <- nrow(cat_ratings$ratings)
+
+  # set the t_is to the average if requested
+  if(use_avg_t == TRUE){
+    cat_ratings$subjects <- cat_ratings$subjects |>
+      mutate(t = t |> lc_vsum() |>
+               lc_mpy(1/n_subjects) |>
+               unlist() |> list())
+  }
+
+  # generate the t_i values, which are the same within a subject
+  cat_ratings$subjects <- cat_ratings$subjects |>
+    rowwise() |>
+    mutate(T_i = list(rmultinom(1, 1, t))) |> # true class
+    ungroup() |>
+    select(subject_id, T_i)
+
+  # convert to single data frame
+  rating_params_cat <- cat_ratings |>
+    as_rating_params_cat() |>
+    select(subject_id, rater_id, T_i, a, p)
+
+
+  rating_params_cat <- rating_params_cat %>%
+    mutate(A_ij = bernoulli_trial(a)) |>
+    rowwise() %>%
+    mutate(P_ij = list(rmultinom(1, 1, p)),
+           rating = which.max( unlist(T_i)*A_ij + (1-A_ij)*unlist(P_ij)) )|>
+    select(subject_id, rating, rater_id, a, p)
+
+  # replace the ratings in the original object
+  cat_ratings$ratings <- rating_params_cat |>
+    select(subject_id, rater_id, rating)
+
+  return(cat_ratings)
+}
+
 #' Truth probabilities by Class 1 rate for each subject
 #' @description Given a rating_params data frame, which contains the t, a, and p
 #' parameters for each rating, as well as the rating, recalculate the t_i
@@ -354,7 +401,7 @@ as_cat_ratings <- function(ratings, labels = NULL, K = NULL){
   if(is.null(labels)) {
     cat_ratings$labels <- str_c("Class ", 1:K)
   } else {
-    if(length(labels != K)) stop("Must provide on label for each rating type")
+    if(length(labels) != K) stop("Must provide on label for each rating type")
     cat_ratings$labels <- labels
   }
 
@@ -487,7 +534,6 @@ fleiss_kappa_cat <- function(cat_ratings) {
 
 }
 
-
 #' expected_krits_per_rating_cat: Average entropy per rating (base 1/K) from the model.
 #'
 #' @param params A list with t, a, and p
@@ -532,3 +578,244 @@ expected_krits_per_rating_cat <- function(params, uniform_t = FALSE){
 
 }
 
+#' Rating Calibration Plot for categorical ratings
+#' @description Compares predicted rating frequencies to observed frequencies
+#' @param cat_ratings A cat_ratings object
+#' @return A ggplot object with the calibration plot and error statistics
+#' @details The title shows the average accuracy a,
+#' the mean absolute error (MAE), the root mean squared error (RMSE),
+#' and the average krits per rating (KPR). The plot compares modeled frequencies
+#' to actuals for each rating category. The error bars show two standard errors.
+#' @export
+rating_calibration_cat <- function(cat_ratings){
+
+  K <- cat_ratings$K
+  N <- nrow(cat_ratings$ratings)
+
+  rating_params_cat <- as_rating_params_cat(cat_ratings)
+
+  # verify the input
+  #verify_cat_ratings(cat_ratings)
+  modeled <- rating_params_cat |>
+    mutate(
+      a_bar_p = lc_subtract(lc_one(n(), K), a) |> lc_mpy(p),
+      a_t = t |> lc_mpy(a),
+      prob = lc_add(a_t, a_bar_p) # a*t + (1-a)*p
+    ) |>
+    select(prob) |>
+    pivot_longer_lc("prob") |>
+    rename(modeled = prob_k, rating = k) |>
+    group_by(rating) |>
+    summarize(modeled = mean(modeled))
+
+  observed <- rating_params_cat |>
+    count(rating) |>
+    mutate(observed = n/N,
+           observed_se = sqrt( observed*(1-observed) / N),
+           observed = if_else(n < 3, NA_real_, observed),
+           observed_se = if_else(n < 3, NA_real_, observed_se))
+
+  comparison <- modeled |>
+    left_join(observed, by = "rating") |>
+    rename( N = n)
+
+  # average accuracy
+  a_avg <- cat_ratings$raters |>
+    summarize(a = mean(a)) |>
+    pull(a)
+
+  # find sum abs error
+  MAE <- sum(abs(
+    (comparison$modeled - comparison$observed) *
+      comparison$N), na.rm = TRUE) / sum(comparison$N, na.rm = TRUE)
+
+  RMSE <- sqrt(sum((
+    (comparison$modeled - comparison$observed)^2 *comparison$N), na.rm = TRUE)
+    / sum(comparison$N, na.rm = TRUE))
+
+  KPR = krits_per_rating_cat(cat_ratings)
+
+  my_title <- str_c("a = ", round(a_avg, 2),
+                    " MAE=", round(MAE, 3),
+                    "  RMSE=", round(RMSE, 3),
+                    "  LL=", round(KPR, 3))
+
+  # add average t, p values to the facets by modifying the rating
+  t_avg <- cat_ratings$subjects |>
+    pivot_longer_lc("t") |>
+    group_by(k) |>
+    summarize(t = mean(t_k)) |>
+    rename(rating = k)
+
+  p_avg <- cat_ratings$raters |>
+    pivot_longer_lc("p") |>
+    group_by(k) |>
+    summarize(p = mean(p_k)) |>
+    rename(rating = k)
+
+  c_avg <- cat_ratings$ratings|>
+    count(rating, name = "N") |>
+    mutate(c = N/sum(N)) |>
+    select(-N)
+
+  pdf <- comparison |>
+    left_join(c_avg, by = "rating") |>
+    left_join(t_avg, by = "rating") |>
+    left_join(p_avg, by = "rating")
+
+  # Merge observed and simulated frequencies
+  my_plot <- pdf |>
+    ggplot(aes(x = modeled, y = observed,
+               ymin = observed - 2*observed_se,
+               ymax = observed + 2*observed_se,
+               label = rating)) +
+    geom_abline(slope = 1, intercept = 0, color = "gray", linetype = "dashed") +
+    geom_errorbar(width = 0, alpha = 0.5) +
+    geom_text() +
+    theme_bw()  +
+    labs(title = my_title,
+         x = "Modeled values",
+         y = "Observed values")
+
+  return(my_plot)
+
+}
+
+
+#' Subject Calibration Plot
+#' @description For each subject compute the fraction of Class 1 ratings and
+#' compare this to the the expected fraction from the t-a-p model parameters
+#' @param rating_params A rating_params dataframe
+#' @param n_bins Number of bins to use in the calibration plot. Defaults to 20.
+#' @param n_sims Number of simulations to run to estimate the modeled
+#' distribution from the probabilities. Defaults to 30.
+#' @return A ggplot object with the calibration plot and error statistics
+#' @details
+#' The probabilities for each rating can be averaged to find the *expected* number
+#' of Class 1 ratings per subject, but here we want a *distribution* of
+#' that variation to use in the plot. That's what the n_sim parameter does. The
+#' error bars are two standard errors of the proportion estimates for the observed
+#' proportions, with any cases of N < 3 omitted.
+#' @export
+subject_calibration_cat <- function(cat_ratings, n_bins = 20, n_sims = 30){
+
+  # verify the input
+  #verify_ratings(rating_params)
+
+  # simulate counts for each subject
+  sim_counts_list <- vector("list", n_sims)
+
+  for (i in seq_len(n_sims)) {
+    sim_ratings <- generate_ti_aj_pj_ratings_cat(cat_ratings, use_avg_t = TRUE)
+    sim_counts_list[[i]] <- sim_ratings$ratings |>
+      count(subject_id, rating, name = "N_c") |>
+      group_by(subject_id) |>
+      mutate(N_r = sum(N_c)) |>
+      ungroup() |>
+      count(N_r, N_c, rating)
+
+
+  }
+
+  # Combine all into a single data frame
+  sim_counts <- bind_rows(sim_counts_list)
+
+  # Count up unique cases of N_r and N_c in the simulated data for each rating type
+  sim_counts <- sim_counts |>
+    filter(!is.na(N_r)) |>
+    group_by(N_r, N_c, rating) |>
+    summarize(modeled = sum(n)) |>
+    ungroup()
+
+  # Count up unique cases of N_r and N_c for the observed data for each rating type
+  observed_counts <- cat_ratings$ratings |>
+    count(subject_id, rating, name = "N_c") |>
+    group_by(subject_id) |>
+    mutate(N_r = sum(N_c)) |>
+    ungroup() |>
+    count(N_r, N_c, rating, name = "observed")
+
+  # match up cases and insert zeros for missing data
+  comparison <- sim_counts |>
+    full_join(observed_counts) |>
+    replace_na(list(observed = 0, modeled = 0)) |>
+    mutate(c = round(N_c/N_r*n_bins)/n_bins) |>
+    group_by(c, rating) |>
+    summarize(n_observed = sum(observed),
+              modeled = sum(modeled)) |>
+    arrange(c) |>
+    mutate(modeled = modeled/sum(modeled),
+           observed = n_observed/sum(n_observed),
+           SE = sqrt( observed*(1-observed) / sum(n_observed)),
+           observed = if_else(n_observed <= 2, NA_real_, observed),
+           SE = if_else(n_observed <= 2, NA_real_, SE))
+
+  # find sum abs error
+  MAE <- sum(abs(
+    (comparison$modeled - comparison$observed) *
+      (comparison$c - lag(comparison$c))), na.rm = TRUE)
+
+  RMSE <- sqrt(sum((
+    (comparison$modeled - comparison$observed)^2 *
+      (comparison$c - lag(comparison$c))), na.rm = TRUE))
+
+  KPR = krits_per_rating_cat(cat_ratings)
+
+  a_avg <- cat_ratings$raters |>
+    summarize(a = mean(a)) |>
+    pull(a)
+
+  my_title <- str_c("a = ", round(a_avg, 2),
+                    " MAE=", round(MAE, 3),
+                    "  RMSE=", round(RMSE, 3),
+                    "  LL=", round(KPR, 3))
+
+  # add average t, p values to the facets by modifying the rating
+  t_avg <- cat_ratings$subjects |>
+    pivot_longer_lc("t") |>
+    group_by(k) |>
+    summarize(t_avg = mean(t_k)) |>
+    rename(rating = k)
+
+  p_avg <- cat_ratings$raters |>
+    pivot_longer_lc("p") |>
+    group_by(k) |>
+    summarize(p_avg = mean(p_k)) |>
+    rename(rating = k)
+
+  c_avg <- cat_ratings$ratings|>
+    count(rating, name = "N") |>
+    mutate(c_avg = N/sum(N)) |>
+    select(-N)
+
+  pdf <- comparison |>
+    left_join(c_avg, by = "rating") |>
+    left_join(t_avg, by = "rating") |>
+    left_join(p_avg, by = "rating") |>
+    mutate(rating = str_c(rating,
+                          ": c=", round(c_avg,2),
+                          " t=", round(t_avg,2),
+                          " p=", round(p_avg,2)))
+
+  # Merge observed and simulated frequencies
+  my_plot <- pdf |>
+    select(c, observed, modeled, rating, SE) |>
+    gather(key = "type", value = "value", -c,-rating, -SE) |>
+    ggplot(aes(x = c, y = value, color = type)) +
+    geom_errorbar(aes(ymin = ifelse(type == "observed",
+                                    value - 2*SE, NA),
+                      ymax = ifelse(type == "observed",
+                                    value + 2*SE, NA)),
+                  width = 0.02, alpha = 0.5) +
+    geom_point() +
+    geom_line() +
+    scale_color_manual(values = c("orange","steelblue")) +
+    theme_bw()  +
+    labs(title = my_title,
+         x = "Fraction of Rating Type",
+         y = "Frequency")  +
+    facet_wrap(~ rating)
+
+  return(my_plot)
+
+}
